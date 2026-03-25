@@ -1,0 +1,31 @@
+# AI Coding Best Practices
+
+## Planning
+- Start with a Concept of Operations or software-description.md and include:
+    - Your one sentence mission
+    - What you think the opportunity is or the problem that is worth solving
+    - What other people think about this problem
+    - Identify competition (even tangential competition)
+    - Describe different types of users
+    - Describe a typical user's path through the app in a few steps
+    - Describe a short list of major features
+    - Describe what tools will be used to build your app
+        - Identify any useful frameworks or decide what you will code from scratch
+    - Name each feature and later we will link from here to each feature plan that describes in more detail
+- Write a coding standards document including
+    - Naming conventions
+    - File organization
+    - Comment requirements
+    - Testing expectations, including a description of:
+        - performance metrics
+    - Database conventions
+    - Error conventions
+    - Performance goals
+- Define a basic style plan for the UI, including:
+    - colors and shapes
+    - how pages, modals, or dropdowns are typically employed
+- Expand your feature plans into a requirements.md
+    - Be specific
+- Create a new milestones.md
+    - Write down the phases of your plan starting with an MVP and leading to more complex features
+    - Copy each requirement into a phase, you might grab, for example, certain security requirements from a later plan to do at an earlier phase if it makes sense

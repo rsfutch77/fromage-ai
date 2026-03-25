@@ -1,0 +1,6 @@
+{
+  "max_actions_per_turn": 200,
+  "max_turns_per_game": 500,
+  "log_level": "INFO",
+  "data_dir": "data/"
+}

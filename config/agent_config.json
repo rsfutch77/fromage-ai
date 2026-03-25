@@ -1,0 +1,11 @@
+{
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "epsilon_decay_games": 5000,
+  "alpha": 0.001,
+  "gamma": 0.95,
+  "reward_win": 1.0,
+  "reward_loss": 0.0,
+  "reward_per_pp": 0.0,
+  "model_save_dir": "models/"
+}

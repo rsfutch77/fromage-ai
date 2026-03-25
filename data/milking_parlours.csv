@@ -1,0 +1,20 @@
+board_id,parlour_num,livestock_cost,bonus_cheese_type,bonus_cheese_age
+# Milking Parlours: spend livestock_cost Livestock to place a Bonus Cheese Token without a Worker.
+# parlour_num 4 on every board is wild: any cheese type and any age (player's choice at time of use).
+# Each parlour can be used once per game.
+1,1,2,Soft,Bronze
+1,2,3,Hard,Silver
+1,3,4,Bleu,Gold
+1,4,5,Any,Any
+2,1,2,Soft,Bronze
+2,2,3,Soft,Silver
+2,3,4,Hard,Gold
+2,4,5,Any,Any
+3,1,2,Bleu,Bronze
+3,2,3,Soft,Silver
+3,3,4,Bleu,Gold
+3,4,5,Any,Any
+4,1,2,Bleu,Bronze
+4,2,3,Hard,Silver
+4,3,4,Hard,Gold
+4,4,5,Any,Any

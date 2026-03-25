@@ -1,0 +1,13 @@
+cheese_type,age,count
+# Order Cards: 4 cards per combination of (cheese_type × age) = 36 total.
+# Distribution is perfectly uniform. No further per-card data needed.
+# At game start: shuffle all 36. Players draw from the deck to acquire Orders.
+Soft,Bronze,4
+Soft,Silver,4
+Soft,Gold,4
+Hard,Bronze,4
+Hard,Silver,4
+Hard,Gold,4
+Bleu,Bronze,4
+Bleu,Silver,4
+Bleu,Gold,4

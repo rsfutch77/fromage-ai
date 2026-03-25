@@ -1,0 +1,7 @@
+shelf_id,column,age,immediate_bonus,points_per_token
+1,resource_bonus,Bronze,trade_resource_for_any,0
+2,resource_bonus,Silver,gain_1_resource_any,0
+3,resource_bonus,Gold,gain_2_diff_resources,0
+4,point_bonus,Bronze,none,1
+5,point_bonus,Silver,none,2
+6,point_bonus,Gold,none,3
