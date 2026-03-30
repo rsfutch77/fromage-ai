@@ -75,8 +75,8 @@ VENUE_ORDER: list[VenueType] = [
 ]
 
 RESOURCE_ORDER: list[ResourceType] = [
-    ResourceType.STRUCTURE,
     ResourceType.LIVESTOCK,
-    ResourceType.FRUIT,
     ResourceType.ORDER,
+    ResourceType.STRUCTURE,
+    ResourceType.FRUIT,
 ]

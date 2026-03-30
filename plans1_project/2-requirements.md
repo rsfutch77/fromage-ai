@@ -74,75 +74,75 @@
 
 ---
 
-[ ] 4. Game Action Application
-  [ ] 4.1 Resource Gain Helper
-    [ ] 4.1.1 Implement `gain_resource(state: GameState, player_id: int, resource: ResourceType, amount: int) -> GameState` in `src/game/engine.py`: add `amount` to `player.resources[resource]`; if `resource == ORDER`, draw that many Order Cards from `state.order_card_deck` and append to `player.order_cards_held` (draw as many as available if deck runs low — no error); trigger Greenhouse if unlocked and Greenhouse resource matches (see 4.5).
-  [ ] 4.2 Apply Gather Action
-    [ ] 4.2.1 Implement `apply_gather(state: GameState, player_id: int, action: GatherAction) -> GameState`: place the appropriate Worker onto the Resource Tile at `resource_space`; set `worker.return_after_rotation = (state.rotation_index + action.resource_space) % 4` (space 1 = returns after 1 turn, space 2 = 2 turns, space 3 = 3 turns); call `gain_resource` for the type facing this player, with `amount = action.resource_space`.
-    [ ] 4.2.2 If `action.use_barn` is True and the Barn structure is unlocked: place the Barn Worker (lowest-priority available worker) onto `ON_BARN` location; set `return_after_rotation = (state.rotation_index + 1) % 4`; call `gain_resource` for the board's Barn resource with `amount = 1`.
-  [ ] 4.3 Apply Make Cheese Action
-    [ ] 4.3.1 Implement `apply_make_cheese(state: GameState, player_id: int, action: MakeCheeseAction) -> GameState`: validate legality (raise `IllegalActionError` if invalid); deduct 1 Fruit if `fruit_requirement == FRUIT` (increment `player.fruit_spent_on_fruited`) or `fruit_requirement == JAM` (increment `player.fruit_spent_on_jam`); place the matching Worker onto the cheese space; set `worker.return_after_rotation = (state.rotation_index + space.age.turns) % 4`; append a `PlacedCheese` to `player.cheese_tokens_on_board`; decrement `player.cheese_tokens_remaining`.
-    [ ] 4.3.2 After placing, call `check_order_completion(state, player_id, placed_cheese)`: if the player holds an Order Card matching the placed cheese's type and age, move the first matching card from `order_cards_held` to `orders_completed`.
-    [ ] 4.3.3 After placing, trigger Loading Dock if that structure is unlocked and the venue matches the board's Loading Dock venue: call `gain_resource` for the Loading Dock reward type with `amount = 1`.
-    [ ] 4.3.4 If `player.cheese_tokens_remaining == 0` after placement, set `state.game_end_triggered = True`.
-  [ ] 4.4 Apply Milking Parlour Action
-    [ ] 4.4.1 Implement `apply_milking_parlour(state: GameState, player_id: int, action: MilkingParlourAction) -> GameState`: validate legality; deduct `livestock_cost` from `player.resources[LIVESTOCK]`; mark `player.milking_parlours_used[action.parlour_num - 1] = True`; place a `PlacedCheese` on the target space (no Worker is placed); decrement `player.cheese_tokens_remaining`; call `check_order_completion`; trigger Loading Dock if applicable; set `game_end_triggered` if tokens exhausted.
-    [ ] 4.4.2 If the target space has `fruit_requirement != NONE`, deduct 1 Fruit and increment the appropriate fruit counter before placing.
-  [ ] 4.5 Apply Greenhouse Trigger
-    [ ] 4.5.1 Implement `apply_greenhouse_trigger(state: GameState, player_id: int, resource: ResourceType, amount: int) -> GameState`: called inside `gain_resource` whenever a resource is gained; if the player's Greenhouse is unlocked and `resource == player_board.greenhouse_resource`, add 1 extra unit of that resource (trigger at most once per turn); track whether Greenhouse has fired this turn via a transient flag on the turn context (not persisted in GameState).
-  [ ] 4.6 Apply Unlock Structure Action
-    [ ] 4.6.1 Implement `apply_unlock_structure(state: GameState, player_id: int, action: UnlockStructureAction) -> GameState`: validate that `not player.structures_unlocked[action.slot - 1]` (slot not already unlocked); deduct `action.slot` Structure tokens from resources; set `player.structures_unlocked[action.slot - 1] = True`.
-  [ ] 4.7 Apply Full Turn
-    [ ] 4.7.1 Implement `apply_turn(state: GameState, player_id: int, action: TurnAction) -> GameState`: apply unlock actions first (player may want resources from gathering to unlock structures — note: unlock actions are processed after gather in this implementation); apply gather; apply make-cheese; apply each milking parlour action in order; return updated state.
-    [ ] 4.7.2 Write `tests/test_engine.py`: verify gather correctly sets worker return rotation and adds resources; verify make-cheese deducts Fruit for Fruit/Jam spaces; verify order completion triggers when cheese matches held card; verify game_end_triggered is set when last token placed; verify Greenhouse adds exactly 1 extra resource and does not double-trigger; verify milking parlour marks the slot used and cannot be reused.
+[x] 4. Game Action Application
+  [x] 4.1 Resource Gain Helper
+    [x] 4.1.1 Implement `gain_resource(state: GameState, player_id: int, resource: ResourceType, amount: int) -> GameState` in `src/game/engine.py`: add `amount` to `player.resources[resource]`; if `resource == ORDER`, draw that many Order Cards from `state.order_card_deck` and append to `player.order_cards_held` (draw as many as available if deck runs low — no error); trigger Greenhouse if unlocked and Greenhouse resource matches (see 4.5).
+  [x] 4.2 Apply Gather Action
+    [x] 4.2.1 Implement `apply_gather(state: GameState, player_id: int, action: GatherAction) -> GameState`: place the appropriate Worker onto the Resource Tile at `resource_space`; set `worker.return_after_rotation = (state.rotation_index + action.resource_space) % 4` (space 1 = returns after 1 turn, space 2 = 2 turns, space 3 = 3 turns); call `gain_resource` for the type facing this player, with `amount = action.resource_space`.
+    [x] 4.2.2 If `action.use_barn` is True and the Barn structure is unlocked: place the Barn Worker (lowest-priority available worker) onto `ON_BARN` location; set `return_after_rotation = (state.rotation_index + 1) % 4`; call `gain_resource` for the board's Barn resource with `amount = 1`.
+  [x] 4.3 Apply Make Cheese Action
+    [x] 4.3.1 Implement `apply_make_cheese(state: GameState, player_id: int, action: MakeCheeseAction) -> GameState`: validate legality (raise `IllegalActionError` if invalid); deduct 1 Fruit if `fruit_requirement == FRUIT` (increment `player.fruit_spent_on_fruited`) or `fruit_requirement == JAM` (increment `player.fruit_spent_on_jam`); place the matching Worker onto the cheese space; set `worker.return_after_rotation = (state.rotation_index + space.age.turns) % 4`; append a `PlacedCheese` to `player.cheese_tokens_on_board`; decrement `player.cheese_tokens_remaining`.
+    [x] 4.3.2 After placing, call `check_order_completion(state, player_id, placed_cheese)`: if the player holds an Order Card matching the placed cheese's type and age, move the first matching card from `order_cards_held` to `orders_completed`.
+    [x] 4.3.3 After placing, trigger Loading Dock if that structure is unlocked and the venue matches the board's Loading Dock venue: call `gain_resource` for the Loading Dock reward type with `amount = 1`.
+    [x] 4.3.4 If `player.cheese_tokens_remaining == 0` after placement, set `state.game_end_triggered = True`.
+  [x] 4.4 Apply Milking Parlour Action
+    [x] 4.4.1 Implement `apply_milking_parlour(state: GameState, player_id: int, action: MilkingParlourAction) -> GameState`: validate legality; deduct `livestock_cost` from `player.resources[LIVESTOCK]`; mark `player.milking_parlours_used[action.parlour_num - 1] = True`; place a `PlacedCheese` on the target space (no Worker is placed); decrement `player.cheese_tokens_remaining`; call `check_order_completion`; trigger Loading Dock if applicable; set `game_end_triggered` if tokens exhausted.
+    [x] 4.4.2 If the target space has `fruit_requirement != NONE`, deduct 1 Fruit and increment the appropriate fruit counter before placing.
+  [x] 4.5 Apply Greenhouse Trigger
+    [x] 4.5.1 Implement `apply_greenhouse_trigger(state: GameState, player_id: int, resource: ResourceType, amount: int) -> GameState`: called inside `gain_resource` whenever a resource is gained; if the player's Greenhouse is unlocked and `resource == player_board.greenhouse_resource`, add 1 extra unit of that resource (trigger at most once per turn); track whether Greenhouse has fired this turn via a transient flag on the turn context (not persisted in GameState).
+  [x] 4.6 Apply Unlock Structure Action
+    [x] 4.6.1 Implement `apply_unlock_structure(state: GameState, player_id: int, action: UnlockStructureAction) -> GameState`: validate that `not player.structures_unlocked[action.slot - 1]` (slot not already unlocked); deduct `action.slot` Structure tokens from resources; set `player.structures_unlocked[action.slot - 1] = True`.
+  [x] 4.7 Apply Full Turn
+    [x] 4.7.1 Implement `apply_turn(state: GameState, player_id: int, action: TurnAction) -> GameState`: apply unlock actions first (player may want resources from gathering to unlock structures — note: unlock actions are processed after gather in this implementation); apply gather; apply make-cheese; apply each milking parlour action in order; return updated state.
+    [x] 4.7.2 Write `tests/test_engine.py`: verify gather correctly sets worker return rotation and adds resources; verify make-cheese deducts Fruit for Fruit/Jam spaces; verify order completion triggers when cheese matches held card; verify game_end_triggered is set when last token placed; verify Greenhouse adds exactly 1 extra resource and does not double-trigger; verify milking parlour marks the slot used and cannot be reused.
 
 ---
 
-[ ] 5. Scoring Engine
-  [ ] 5.1 Festival Scoring
-    [ ] 5.1.1 Implement `score_festival(player_id: int, all_placed_cheese: list[PlacedCheese], festival_spaces: list[FestivalSpace], scoring_table: dict[int, int]) -> int` in `src/game/scoring.py`: collect all Festival spaces that have any player's token (for adjacency) or are `FREE_SAMPLE` (always count for adjacency); build a set of occupied (row, col) coordinates including free-sample positions; find connected groups of orthogonally adjacent occupied positions that contain at least one token belonging to `player_id`; for each such group, look up `scoring_table[min(group_size, 7)]`; add `FESTIVAL_BONUS_PER_EXTRA * max(0, group_size - 7)` for groups larger than 7; sum all group scores.
-    [ ] 5.1.2 A `FREE_SAMPLE` space always participates in adjacency for all players but does not itself belong to any player's group unless adjacent to that player's token.
-  [ ] 5.2 Villes Scoring
-    [ ] 5.2.1 Implement `score_villes(state: GameState, data: GameDataLoader) -> dict[int, int]` (returns player_id → points): for each of the 6 regions, count influence per player (a token at a Villes space contributes 1 influence per region that space touches, regardless of age); determine the player with highest influence; award `win_value`; if tied, award `tie_value` to all tied players; update `state.villes_customer_token_holders` in place.
-    [ ] 5.2.2 Influence from Bronze spaces counts for 1 region, Silver for 2, Gold for 3 — this is already encoded in the `regions` list length on each `VillesSpace`; simply sum presence per region.
-  [ ] 5.3 Fromagerie Scoring
-    [ ] 5.3.1 Implement `score_fromagerie(player_id: int, all_placed: list[PlacedCheese], shelves: list[FromagerieShelf], spaces: list[FromagerieSpace], rubric: dict[int, int]) -> int`: count how many distinct `shelf_id` values appear among the player's Fromagerie tokens; look up `rubric[shelves_occupied]` for base points; for each token on a shelf in the `point_bonus` column, add `shelf.points_per_token`; return total.
-    [ ] 5.3.2 Immediate Fromagerie shelf bonuses (resource gains) are applied at placement time in `apply_make_cheese` (section 4.3), not at scoring time. Scoring only handles end-game points.
-  [ ] 5.4 Bistro Scoring
-    [ ] 5.4.1 Implement `score_bistro(player_id: int, all_placed: list[PlacedCheese], bistro_spaces: list[BistroSpace], scoring: list[BistroScoringRow]) -> int`: count how many tables have exactly 2 tokens belonging to `player_id` (= pairings); look up the scoring row via `bistro_score_for(pairings)`; count all of the player's Bistro tokens by plate age (Bronze count, Silver count, Gold count, regardless of pairing status); return `bronze_count * row.bronze + silver_count * row.silver + gold_count * row.gold`.
-  [ ] 5.5 Order Scoring
-    [ ] 5.5.1 Implement `score_orders(completed: list[OrderCard], rubric: dict[int, int]) -> int`: `n = len(completed)`; if `n == 0` return 0; if `n <= 6` return `rubric[n]`; return `rubric[6] + ORDER_BONUS_PER_EXTRA * (n - 6)`.
-  [ ] 5.6 Fruit Scoring
-    [ ] 5.6.1 Implement `score_fruit(player: PlayerState) -> int`: return `player.fruit_spent_on_fruited * player.fruit_spent_on_jam` (multiplicative; zero if either is zero).
-  [ ] 5.7 Headquarters Scoring
-    [ ] 5.7.1 Implement `score_headquarters(player: PlayerState, board: PlayerBoardStructure, state: GameState) -> int`: if slot 4 (Headquarters) is not unlocked (`not player.structures_unlocked[3]`), return 0; otherwise compute the condition-specific score:
+[x] 5. Scoring Engine
+  [x] 5.1 Festival Scoring
+    [x] 5.1.1 Implement `score_festival(player_id: int, all_placed_cheese: list[PlacedCheese], festival_spaces: list[FestivalSpace], scoring_table: dict[int, int]) -> int` in `src/game/scoring.py`: collect all Festival spaces that have any player's token (for adjacency) or are `FREE_SAMPLE` (always count for adjacency); build a set of occupied (row, col) coordinates including free-sample positions; find connected groups of orthogonally adjacent occupied positions that contain at least one token belonging to `player_id`; for each such group, look up `scoring_table[min(group_size, 7)]`; add `FESTIVAL_BONUS_PER_EXTRA * max(0, group_size - 7)` for groups larger than 7; sum all group scores.
+    [x] 5.1.2 A `FREE_SAMPLE` space always participates in adjacency for all players but does not itself belong to any player's group unless adjacent to that player's token.
+  [x] 5.2 Villes Scoring
+    [x] 5.2.1 Implement `score_villes(state: GameState, data: GameDataLoader) -> dict[int, int]` (returns player_id → points): for each of the 6 regions, count influence per player (a token at a Villes space contributes 1 influence per region that space touches, regardless of age); determine the player with highest influence; award `win_value`; if tied, award `tie_value` to all tied players; update `state.villes_customer_token_holders` in place.
+    [x] 5.2.2 Influence from Bronze spaces counts for 1 region, Silver for 2, Gold for 3 — this is already encoded in the `regions` list length on each `VillesSpace`; simply sum presence per region.
+  [x] 5.3 Fromagerie Scoring
+    [x] 5.3.1 Implement `score_fromagerie(player_id: int, all_placed: list[PlacedCheese], shelves: list[FromagerieShelf], spaces: list[FromagerieSpace], rubric: dict[int, int]) -> int`: count how many distinct `shelf_id` values appear among the player's Fromagerie tokens; look up `rubric[shelves_occupied]` for base points; for each token on a shelf in the `point_bonus` column, add `shelf.points_per_token`; return total.
+    [x] 5.3.2 Immediate Fromagerie shelf bonuses (resource gains) are applied at placement time in `apply_make_cheese` (section 4.3), not at scoring time. Scoring only handles end-game points.
+  [x] 5.4 Bistro Scoring
+    [x] 5.4.1 Implement `score_bistro(player_id: int, all_placed: list[PlacedCheese], bistro_spaces: list[BistroSpace], scoring: list[BistroScoringRow]) -> int`: count how many tables have exactly 2 tokens belonging to `player_id` (= pairings); look up the scoring row via `bistro_score_for(pairings)`; count all of the player's Bistro tokens by plate age (Bronze count, Silver count, Gold count, regardless of pairing status); return `bronze_count * row.bronze + silver_count * row.silver + gold_count * row.gold`.
+  [x] 5.5 Order Scoring
+    [x] 5.5.1 Implement `score_orders(completed: list[OrderCard], rubric: dict[int, int]) -> int`: `n = len(completed)`; if `n == 0` return 0; if `n <= 6` return `rubric[n]`; return `rubric[6] + ORDER_BONUS_PER_EXTRA * (n - 6)`.
+  [x] 5.6 Fruit Scoring
+    [x] 5.6.1 Implement `score_fruit(player: PlayerState) -> int`: return `player.fruit_spent_on_fruited * player.fruit_spent_on_jam` (multiplicative; zero if either is zero).
+  [x] 5.7 Headquarters Scoring
+    [x] 5.7.1 Implement `score_headquarters(player: PlayerState, board: PlayerBoardStructure, state: GameState) -> int`: if slot 4 (Headquarters) is not unlocked (`not player.structures_unlocked[3]`), return 0; otherwise compute the condition-specific score:
       - Board 1 ("per deployed Structure"): return `sum(player.structures_unlocked)` (count of True slots).
       - Board 2 ("per Fruit/Jam spent"): return `player.fruit_spent_on_fruited + player.fruit_spent_on_jam`.
       - Board 3 ("per completed Order"): return `len(player.orders_completed)`.
       - Board 4 ("per Livestock in Parlour"): return sum of `livestock_cost` for each Milking Parlour the player used this game (`milking_parlours_used[i]` is True).
-  [ ] 5.8 Unused Resource Scoring
-    [ ] 5.8.1 Implement `score_unused_resources(player: PlayerState) -> int`: sum all values in `player.resources`; return `total // 2` (1 PP per 2 resources, rounded down).
-  [ ] 5.9 Full Game Score
-    [ ] 5.9.1 Implement `score_game(state: GameState, data: GameDataLoader) -> dict[int, int]` (player_id → total PP): for each player, sum Festival + Villes + Fromagerie + Bistro + Orders + Fruit + Headquarters + Unused Resources; return the full breakdown as a `ScoreBreakdown` dataclass with one field per scoring category plus `total`.
-    [ ] 5.9.2 Define `ScoreBreakdown` dataclass in `src/game/scoring.py` with fields: `player_id: int`, `festival: int`, `villes: int`, `fromagerie: int`, `bistro: int`, `orders: int`, `fruit: int`, `headquarters: int`, `unused_resources: int`, `total: int`.
-    [ ] 5.9.3 Implement `winner(scores: list[ScoreBreakdown]) -> list[int]`: return list of player_ids who won; tiebreaker 1 = most cheese tokens placed (15 - remaining); tiebreaker 2 = shared victory (return all tied players).
-    [ ] 5.9.4 Write `tests/test_scoring.py`: verify `score_festival` correctly identifies adjacency groups including free-sample spaces; verify `score_bistro` with 0 pairings returns only Silver/Gold plate points; verify `score_fruit` returns 0 when either factor is 0; verify `score_orders` handles 7+ orders with the +4 bonus; verify `score_game` sums all categories correctly for a known state.
+  [x] 5.8 Unused Resource Scoring
+    [x] 5.8.1 Implement `score_unused_resources(player: PlayerState) -> int`: sum all values in `player.resources`; return `total // 2` (1 PP per 2 resources, rounded down).
+  [x] 5.9 Full Game Score
+    [x] 5.9.1 Implement `score_game(state: GameState, data: GameDataLoader) -> dict[int, int]` (player_id → total PP): for each player, sum Festival + Villes + Fromagerie + Bistro + Orders + Fruit + Headquarters + Unused Resources; return the full breakdown as a `ScoreBreakdown` dataclass with one field per scoring category plus `total`.
+    [x] 5.9.2 Define `ScoreBreakdown` dataclass in `src/game/scoring.py` with fields: `player_id: int`, `festival: int`, `villes: int`, `fromagerie: int`, `bistro: int`, `orders: int`, `fruit: int`, `headquarters: int`, `unused_resources: int`, `total: int`.
+    [x] 5.9.3 Implement `winner(scores: list[ScoreBreakdown]) -> list[int]`: return list of player_ids who won; tiebreaker 1 = most cheese tokens placed (15 - remaining); tiebreaker 2 = shared victory (return all tied players).
+    [x] 5.9.4 Write `tests/test_scoring.py`: verify `score_festival` correctly identifies adjacency groups including free-sample spaces; verify `score_bistro` with 0 pairings returns only Silver/Gold plate points; verify `score_fruit` returns 0 when either factor is 0; verify `score_orders` handles 7+ orders with the +4 bonus; verify `score_game` sums all categories correctly for a known state.
 
 ---
 
-[ ] 6. Full Game Simulation Loop
-  [ ] 6.1 Turn Orchestration
-    [ ] 6.1.1 Implement `run_turn(state: GameState, agents: list[Agent], data: GameDataLoader) -> GameState` in `src/game/simulation.py`: call `retrieve_workers(state)` at turn start; for each player in order (0, 1, 2, 3), call `agent.choose_action(state, player_id)` → `TurnAction`, then call `apply_turn(state, player_id, action)`; after all 4 players act, call `rotate_board(state)`; increment `state.turn_number`; if `state.game_end_triggered` was set during this turn, set `state.game_over = True`.
-    [ ] 6.1.2 Implement `run_game(agents: list[Agent], data: GameDataLoader, seed: int | None = None) -> GameResult` in `src/game/simulation.py`: call `setup_game(data, seed)`; loop `run_turn` until `state.game_over`; call `score_game`; return a `GameResult` dataclass containing `scores: list[ScoreBreakdown]`, `winner_ids: list[int]`, `total_turns: int`, `final_state: GameState`.
-    [ ] 6.1.3 Define `Agent` abstract base class in `src/ai/agent.py` with abstract method `choose_action(state: GameState, player_id: int) -> TurnAction`; all agent implementations must subclass this.
-    [ ] 6.1.4 Define `GameResult` dataclass in `src/game/simulation.py` with fields: `scores: list[ScoreBreakdown]`, `winner_ids: list[int]`, `total_turns: int`, `seed: int | None`, `final_state: GameState`.
-  [ ] 6.2 Simulation Config
-    [ ] 6.2.1 Create `config/simulation_config.json` with keys: `max_actions_per_turn` (int, default 200), `max_turns_per_game` (int, default 500 — safety cap to prevent infinite loops), `log_level` (string, default `"INFO"`), `data_dir` (string, default `"data/"`).
-    [ ] 6.2.2 If a game exceeds `max_turns_per_game`, log a WARNING and return the current scores as-is with `game_over = True`.
-  [ ] 6.3 Tests
-    [ ] 6.3.1 Write `tests/test_simulation.py`: run one full game with 4 RandomAgents (see section 7) and verify it completes without error, produces 4 `ScoreBreakdown` entries, and `total_turns >= 1`.
-    [ ] 6.3.2 Verify that two games run with the same seed produce identical `GameResult` objects.
-    [ ] 6.3.3 Verify that `game_end_triggered` is set on the turn a player places their last token and `game_over` is True after that turn completes.
+[x] 6. Full Game Simulation Loop
+  [x] 6.1 Turn Orchestration
+    [x] 6.1.1 Implement `run_turn(state: GameState, agents: list[Agent], data: GameDataLoader) -> GameState` in `src/game/simulation.py`: call `retrieve_workers(state)` at turn start; for each player in order (0, 1, 2, 3), call `agent.choose_action(state, player_id)` → `TurnAction`, then call `apply_turn(state, player_id, action)`; after all 4 players act, call `rotate_board(state)`; increment `state.turn_number`; if `state.game_end_triggered` was set during this turn, set `state.game_over = True`.
+    [x] 6.1.2 Implement `run_game(agents: list[Agent], data: GameDataLoader, seed: int | None = None) -> GameResult` in `src/game/simulation.py`: call `setup_game(data, seed)`; loop `run_turn` until `state.game_over`; call `score_game`; return a `GameResult` dataclass containing `scores: list[ScoreBreakdown]`, `winner_ids: list[int]`, `total_turns: int`, `final_state: GameState`.
+    [x] 6.1.3 Define `Agent` abstract base class in `src/ai/agent.py` with abstract method `choose_action(state: GameState, player_id: int) -> TurnAction`; all agent implementations must subclass this.
+    [x] 6.1.4 Define `GameResult` dataclass in `src/game/simulation.py` with fields: `scores: list[ScoreBreakdown]`, `winner_ids: list[int]`, `total_turns: int`, `seed: int | None`, `final_state: GameState`.
+  [x] 6.2 Simulation Config
+    [x] 6.2.1 Create `config/simulation_config.json` with keys: `max_actions_per_turn` (int, default 200), `max_turns_per_game` (int, default 500 — safety cap to prevent infinite loops), `log_level` (string, default `"INFO"`), `data_dir` (string, default `"data/"`).
+    [x] 6.2.2 If a game exceeds `max_turns_per_game`, log a WARNING and return the current scores as-is with `game_over = True`.
+  [x] 6.3 Tests
+    [x] 6.3.1 Write `tests/test_simulation.py`: run one full game with 4 RandomAgents (see section 7) and verify it completes without error, produces 4 `ScoreBreakdown` entries, and `total_turns >= 1`.
+    [x] 6.3.2 Verify that two games run with the same seed produce identical `GameResult` objects.
+    [x] 6.3.3 Verify that `game_end_triggered` is set on the turn a player places their last token and `game_over` is True after that turn completes.
 
 ---
 

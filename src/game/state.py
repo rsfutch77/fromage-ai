@@ -95,7 +95,7 @@ class GameState:
     game_end_triggered: bool
     game_over: bool
     order_card_deck: list[OrderCard]
-    resource_tile_orientation: int        # 0–3; set at setup, does not rotate
+    resource_tile_orientation: int        # 0–3; initial offset set at setup; rotation applied via rotation_index
     villes_customer_token_holders: dict[str, int | None]  # region → player_id or None
 
     # ------------------------------------------------------------------
@@ -107,8 +107,12 @@ class GameState:
         return VENUE_ORDER[(player_id + self.rotation_index) % 4]
 
     def resource_facing(self, player_id: int) -> ResourceType:
-        """Which resource type the Resource Tile shows to *player_id*."""
-        return RESOURCE_ORDER[(player_id + self.resource_tile_orientation) % 4]
+        """Which resource type the Resource Tile shows to *player_id*.
+
+        The resource tile rotates with the board (counter-clockwise relative
+        to players), so rotation_index is subtracted.
+        """
+        return RESOURCE_ORDER[(player_id + self.resource_tile_orientation - self.rotation_index) % 4]
 
     # ------------------------------------------------------------------
     # Serialisation

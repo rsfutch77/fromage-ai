@@ -63,8 +63,9 @@ def setup_game(data: GameDataLoader, seed: int | None = None) -> GameState:
     board_ids = [1, 2, 3, 4]
     rng.shuffle(board_ids)
 
-    # Set resource tile orientation (0–3)
-    resource_tile_orientation = rng.randint(0, 3)
+    # Resource tile orientation is fixed at 0 per project assumptions
+    # (see plans1_project/assumptions.md).
+    resource_tile_orientation = 0
 
     # Build initial villes token holders (all unclaimed)
     region_names = [ct.region_name for ct in data.customer_tokens]

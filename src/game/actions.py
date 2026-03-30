@@ -84,6 +84,7 @@ class MilkingParlourAction:
     parlour_num: int
     chosen_cheese_type: CheeseType | None = None
     chosen_age: AgeType | None = None
+    target_venue: VenueType | None = None   # which venue the target space is in
     target_space_id: int | None = None
     target_row: int | None = None
     target_col: int | None = None
@@ -103,9 +104,11 @@ class TurnAction:
     """The complete plan for one player's turn.
 
     Any field may be None/empty to skip that sub-action.
+    make_cheese may contain up to one action per available worker type so a
+    player can place all their in-hand workers on cheese spaces in one turn.
     """
     gather: GatherAction | None = None
-    make_cheese: MakeCheeseAction | None = None
+    make_cheese: list[MakeCheeseAction] = field(default_factory=list)
     milking_parlours: list[MilkingParlourAction] = field(default_factory=list)
     unlock_structures: list[UnlockStructureAction] = field(default_factory=list)
 
@@ -190,8 +193,13 @@ def _all_empty_cheese_spaces(
     return results
 
 
-def _valid_parlour_targets(parlour, occupied: set, data: GameDataLoader) -> list[tuple]:
-    """Return valid target tuples for *parlour*.
+def _valid_parlour_targets(
+    parlour,
+    occupied: set,
+    data: GameDataLoader,
+    facing_venue: VenueType,
+) -> list[tuple]:
+    """Return valid target tuples for *parlour*, restricted to *facing_venue*.
 
     Each tuple: (chosen_type, chosen_age, venue, space_id, row, col).
     For a wild parlour, chosen_type/age = the space's own type/age.
@@ -200,6 +208,8 @@ def _valid_parlour_targets(parlour, occupied: set, data: GameDataLoader) -> list
     all_spaces = _all_empty_cheese_spaces(data, occupied)
 
     for (venue, cheese_type, age, space_id, row, col) in all_spaces:
+        if venue != facing_venue:
+            continue
         if parlour.bonus_cheese_type is None:
             # Wild parlour — any space, type/age taken from the space itself.
             results.append((cheese_type, age, venue, space_id, row, col))
@@ -213,6 +223,40 @@ def _valid_parlour_targets(parlour, occupied: set, data: GameDataLoader) -> list
 # ---------------------------------------------------------------------------
 # Private helper — affordability check for full turn combination
 # ---------------------------------------------------------------------------
+
+def _fruit_req_for_milking_target(action: MilkingParlourAction, data: GameDataLoader) -> FruitRequirement:
+    """Look up the FruitRequirement for the target space of a MilkingParlourAction."""
+    venue = action.target_venue
+    if action.target_row is not None and action.target_col is not None:
+        for sp in data.festival_spaces:
+            if sp.row == action.target_row and sp.col == action.target_col:
+                return sp.fruit_requirement
+    elif action.target_space_id is not None:
+        if venue == VenueType.FROMAGERIE:
+            for sp in data.fromagerie_spaces:
+                if sp.space_id == action.target_space_id:
+                    return sp.fruit_requirement
+        elif venue == VenueType.BISTRO:
+            for sp in data.bistro_spaces:
+                if sp.space_id == action.target_space_id:
+                    return sp.fruit_requirement
+        elif venue == VenueType.VILLES:
+            for sp in data.villes_spaces:
+                if sp.space_id == action.target_space_id:
+                    return sp.fruit_requirement
+        else:
+            # venue unknown — search all (less efficient but safe fallback)
+            for sp in data.fromagerie_spaces:
+                if sp.space_id == action.target_space_id:
+                    return sp.fruit_requirement
+            for sp in data.bistro_spaces:
+                if sp.space_id == action.target_space_id:
+                    return sp.fruit_requirement
+            for sp in data.villes_spaces:
+                if sp.space_id == action.target_space_id:
+                    return sp.fruit_requirement
+    return FruitRequirement.NONE
+
 
 def _fruit_req_for_action(action: MakeCheeseAction, data: GameDataLoader) -> FruitRequirement:
     """Look up the FruitRequirement of the target space for a MakeCheeseAction."""
@@ -240,7 +284,7 @@ def _is_affordable(
     player_id: int,
     data: GameDataLoader,
     gather: GatherAction | None,
-    make_cheese: MakeCheeseAction | None,
+    make_cheese: list[MakeCheeseAction],
     parlour_actions: list[MilkingParlourAction],
     unlock_actions: list[UnlockStructureAction],
 ) -> bool:
@@ -262,15 +306,15 @@ def _is_affordable(
         if avail[ResourceType.STRUCTURE] < 0:
             return False
 
-    # Make-cheese fruit cost
-    if make_cheese is not None:
-        fr = _fruit_req_for_action(make_cheese, data)
+    # Make-cheese fruit costs (one per action with a fruit requirement)
+    for mc in make_cheese:
+        fr = _fruit_req_for_action(mc, data)
         if fr != FruitRequirement.NONE:
             avail[ResourceType.FRUIT] -= 1
             if avail[ResourceType.FRUIT] < 0:
                 return False
 
-    # Milking parlour livestock costs
+    # Milking parlour livestock + fruit costs
     parlour_map = {p.parlour_num: p for p in data.milking_parlours
                    if p.board_id == player.board_id}
     for pa in parlour_actions:
@@ -280,6 +324,11 @@ def _is_affordable(
         avail[ResourceType.LIVESTOCK] -= parlour.livestock_cost
         if avail[ResourceType.LIVESTOCK] < 0:
             return False
+        fr = _fruit_req_for_milking_target(pa, data)
+        if fr != FruitRequirement.NONE:
+            avail[ResourceType.FRUIT] -= 1
+            if avail[ResourceType.FRUIT] < 0:
+                return False
 
     return True
 
@@ -302,6 +351,9 @@ def legal_gather_actions(
     player = state.players[player_id]
     barn_unlocked = player.structures_unlocked[_BARN_IDX]
 
+    workers_in_hand = [w for w in player.workers if w.location == WorkerLocation.IN_HAND]
+    n_in_hand = len(workers_in_hand)
+
     # Find which resource spaces (1-3) this player already occupies.
     occupied_spaces: set[int] = set()
     for worker in player.workers:
@@ -310,11 +362,15 @@ def legal_gather_actions(
 
     actions: list[GatherAction | None] = [None]  # Always legal to skip gather.
 
+    if n_in_hand == 0:
+        return actions  # No worker available to place on the resource tile.
+
     for space in (1, 2, 3):
         if space in occupied_spaces:
             continue
         actions.append(GatherAction(resource_space=space, use_barn=False))
-        if barn_unlocked:
+        # Barn requires a second worker in hand (one for resource tile, one for barn).
+        if barn_unlocked and n_in_hand >= 2:
             actions.append(GatherAction(resource_space=space, use_barn=True))
 
     return actions
@@ -386,9 +442,14 @@ def legal_milking_parlour_actions(
     """
     player = state.players[player_id]
     available_livestock = player.resources.get(ResourceType.LIVESTOCK, 0)
+    tokens_available = player.cheese_tokens_remaining
+
+    if tokens_available <= 0:
+        return [[]]
 
     player_parlours = [p for p in data.milking_parlours if p.board_id == player.board_id]
     occupied = _occupied_set(state)
+    facing_venue = state.venue_facing(player_id)
 
     # Gather individually usable parlours with their target options.
     usable: list[tuple] = []  # (parlour, [target_tuples])
@@ -398,7 +459,7 @@ def legal_milking_parlour_actions(
             continue
         if parlour.livestock_cost > available_livestock:
             continue
-        targets = _valid_parlour_targets(parlour, occupied, data)
+        targets = _valid_parlour_targets(parlour, occupied, data, facing_venue)
         if targets:
             usable.append((parlour, targets))
 
@@ -407,6 +468,8 @@ def legal_milking_parlour_actions(
     # Generate all valid subsets of parlours, with one target choice per parlour.
     for size in range(1, len(usable) + 1):
         for parlour_subset in combinations(usable, size):
+            if size > tokens_available:
+                continue
             total_cost = sum(p.livestock_cost for p, _ in parlour_subset)
             if total_cost > available_livestock:
                 continue
@@ -423,6 +486,7 @@ def legal_milking_parlour_actions(
                         parlour_num=parlour.parlour_num,
                         chosen_cheese_type=ct,
                         chosen_age=ca,
+                        target_venue=venue,
                         target_space_id=sid,
                         target_row=row,
                         target_col=col,
@@ -456,6 +520,65 @@ def legal_unlock_actions(
     return result
 
 
+def _workers_available_after_gather(
+    player: PlayerState,
+    gather: GatherAction | None,
+) -> set[CheeseType]:
+    """Return CheeseTypes still in hand after gather (and optional barn) worker deployment."""
+    in_hand = [w for w in player.workers if w.location == WorkerLocation.IN_HAND]
+    consumed: list[CheeseType] = []
+    if gather is not None and in_hand:
+        consumed.append(in_hand[0].cheese_type)
+        if gather.use_barn and len(in_hand) > 1:
+            consumed.append(in_hand[1].cheese_type)
+    return {w.cheese_type for w in in_hand} - set(consumed)
+
+
+def _make_cheese_space_key(a: MakeCheeseAction) -> tuple:
+    """Hashable key for the target space of a MakeCheeseAction."""
+    if a.venue == VenueType.FESTIVAL:
+        return (a.venue, a.row, a.col)
+    return (a.venue, a.space_id)
+
+
+def _legal_cheese_combos(
+    available_types: set[CheeseType],
+    single_cheese_actions: list[MakeCheeseAction | None],
+    max_placements: int,
+) -> list[list[MakeCheeseAction]]:
+    """Return all valid subsets of simultaneous cheese placements.
+
+    Each returned list is a set of non-conflicting MakeCheeseActions using
+    distinct worker types from *available_types*.  Always includes the empty
+    list (place no cheese this turn).
+
+    *max_placements* caps subset size at the player's remaining cheese-token
+    count so we never generate a combo that would exceed the supply.
+    """
+    candidates = [
+        a for a in single_cheese_actions
+        if a is not None and a.worker_type in available_types
+    ]
+    by_type: dict[CheeseType, list[MakeCheeseAction]] = {}
+    for a in candidates:
+        by_type.setdefault(a.worker_type, []).append(a)
+
+    types = list(by_type.keys())
+    result: list[list[MakeCheeseAction]] = [[]]
+
+    max_size = min(len(types), max_placements)
+    for size in range(1, max_size + 1):
+        for type_subset in combinations(types, size):
+            target_lists = [by_type[t] for t in type_subset]
+            for target_combo in product(*target_lists):
+                keys = [_make_cheese_space_key(a) for a in target_combo]
+                if len(set(keys)) < len(keys):
+                    continue  # two actions targeting the same space
+                result.append(list(target_combo))
+
+    return result
+
+
 def all_legal_turn_actions(
     state: GameState,
     player_id: int,
@@ -474,20 +597,28 @@ def all_legal_turn_actions(
     parlour_combos = legal_milking_parlour_actions(state, player_id, data)
     unlock_seqs = legal_unlock_actions(state, player_id)
 
+    player = state.players[player_id]
     results: list[TurnAction] = []
 
     for gc in gather_choices:
-        extra_fruit = (gc.resource_space if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
-        cheese_choices = legal_make_cheese_actions(state, player_id, data, extra_fruit)
+        # Workers consumed by gather (first in-hand) and barn (second in-hand).
+        # Remaining types may each place one worker on a cheese space.
+        available_for_cheese: set[CheeseType] = _workers_available_after_gather(player, gc)
 
-        for cc in cheese_choices:
+        extra_fruit = (gc.resource_space if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
+        all_cheese = legal_make_cheese_actions(state, player_id, data, extra_fruit)
+        cheese_combos = _legal_cheese_combos(
+            available_for_cheese, all_cheese, player.cheese_tokens_remaining
+        )
+
+        for combo in cheese_combos:
             for pc in parlour_combos:
                 for uc in unlock_seqs:
-                    if not _is_affordable(state, player_id, data, gc, cc, pc, uc):
+                    if not _is_affordable(state, player_id, data, gc, combo, pc, uc):
                         continue
                     results.append(TurnAction(
                         gather=gc,
-                        make_cheese=cc,
+                        make_cheese=list(combo),
                         milking_parlours=list(pc),
                         unlock_structures=list(uc),
                     ))
