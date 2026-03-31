@@ -189,32 +189,41 @@
 - **Focus**: Implement a tkinter-based live board display that renders all four venue quadrants, rotates player labels with the board, and can be driven step-by-step via `StepRunner` for debugging simulations without reading raw logs.
 
 ### Plan Review
-- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
-- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
-- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
-- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
-- [ ] Define convenient feature flags.
+- [x] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+  - Layout, colours, rotation logic, and StepRunner integration are all specified in the milestone. `BoardDisplay` constructor and public API are unambiguous.
+- [x] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+  - All four venues rendered; player labels rotate; sidebar shows resources/tokens/workers/orders; `update()` and `close()` implemented.
+- [x] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+  - No Phase 5 matplotlib work pulled in; milestone is self-contained.
+- [x] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+  - `board_display.py` ~240 lines — well within 500-line limit.
+- [x] Define convenient feature flags.
+  - `_CELL = 28` and `_PAD = 4` module constants control cell size; colour dicts can be adjusted without touching logic.
 
 ### Outputs
 - `src/ui/__init__.py` — empty package marker
 - `src/ui/board_display.py` — `BoardDisplay` class (tkinter Canvas-based)
 
 ### Coding Tasks
-- [ ] Create `src/ui/__init__.py`
-- [ ] Define `BoardDisplay` class in `src/ui/board_display.py`
+- [x] Create `src/ui/__init__.py`
+- [x] Define `BoardDisplay` class in `src/ui/board_display.py`
   - Constructor: `__init__(self, data: GameDataLoader)` — creates the tkinter root window, draws the 4-quadrant layout (Fromagerie, Bistro, Villes, Festival), and a sidebar
   - Each quadrant has a `Player N` label above it; label text is recomputed from `state.rotation_index` and `state.resource_tile_orientation` on each update
   - Cheese spaces drawn as small squares on a Canvas; filled with a type colour (Soft = white, Hard = yellow, Bleu = blue) when occupied, grey outline when empty
   - Sidebar shows each player's resource counts and `cheese_tokens_remaining`
   - `update(state: GameState) -> None` — redraws all quadrant contents and labels; calls `root.update()` so the window stays responsive
   - `close() -> None` — destroys the tkinter root
-- [ ] Update `src/game/simulation.py` `StepRunner` to accept an optional `display: BoardDisplay | None = None`; if provided, call `display.update(state)` after each step
+- [x] Update `src/game/simulation.py` `StepRunner` to accept an optional `display: BoardDisplay | None = None`; if provided, call `display.update(state)` after each step
 
 #### Code Review Tasks
-- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
-- [ ] Review for duplicated code and try to consolidate and use imports instead
-- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
-- [ ] Check to make sure we have explicit imports and minimal coupling
+- [x] Review if you made any files that are too long, try to keep them below around 500 lines
+  - `board_display.py` ~240 lines. `simulation.py` unchanged in size.
+- [x] Review for duplicated code and try to consolidate and use imports instead
+  - `_draw_space` helper centralises all rectangle + player-dot drawing; `_redraw_*` methods share it.
+- [x] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+  - No requirements changes needed; milestone outputs and tasks are fully reflected above.
+- [x] Check to make sure we have explicit imports and minimal coupling
+  - `board_display.py` imports from `src.game.types` only at call time (inside `_update_quad_labels`); `simulation.py` imports `BoardDisplay` under `TYPE_CHECKING` only — no runtime circular dependency.
 
 ---
 

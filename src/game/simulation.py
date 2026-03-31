@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from src.ai.agent import Agent
     from src.game.data_loader import GameDataLoader
     from src.game.state import GameState
+    from src.ui.board_display import BoardDisplay
 
 logger = logging.getLogger(__name__)
 
@@ -46,34 +47,44 @@ class GameResult:
 # Turn and game loop
 # ---------------------------------------------------------------------------
 
-def run_turn(
-    state: GameState,
-    agents: Sequence[Agent],
-    data: GameDataLoader,
-) -> GameState:
-    """Execute one full turn for all 4 players.
+def run_placements(
+    state: "GameState",
+    agents: "Sequence[Agent]",
+    data: "GameDataLoader",
+) -> "GameState":
+    """Phase 1 of a turn: retrieve due workers then have all 4 players act.
 
-    Steps:
-    1. Retrieve workers due to return this rotation.
-    2. Each player (0–3) chooses and applies their TurnAction.
-    3. Rotate the board.
-    4. Increment turn_number.
-    5. Set game_over=True if game_end_triggered was set during this turn.
+    Returns the post-placement state *before* board rotation.
     """
     state = retrieve_workers(state)
-
     for player_id in range(4):
         action = agents[player_id].choose_action(state, player_id)
         state = apply_turn(state, player_id, action, data)
+    return state
 
-    # rotate_board returns a new GameState; mutate the new object for bookkeeping
+
+def run_rotation(state: "GameState") -> "GameState":
+    """Phase 2 of a turn: rotate the board and advance turn bookkeeping.
+
+    Returns the post-rotation state.  Sets game_over if game_end_triggered.
+    """
     new_state = rotate_board(state)
     new_state.turn_number += 1
-
     if new_state.game_end_triggered:
         new_state.game_over = True
-
     return new_state
+
+
+def run_turn(
+    state: "GameState",
+    agents: "Sequence[Agent]",
+    data: "GameDataLoader",
+) -> "GameState":
+    """Execute one full turn for all 4 players (placements + rotation).
+
+    Convenience wrapper around run_placements + run_rotation.
+    """
+    return run_rotation(run_placements(state, agents, data))
 
 
 class StepRunner:
@@ -97,13 +108,17 @@ class StepRunner:
         agents: Sequence[Agent],
         data: GameDataLoader,
         seed: int | None = None,
+        display: "BoardDisplay | None" = None,
     ) -> None:
         self._agents = agents
         self._data = data
         self._seed = seed
+        self._display = display
         self._state = setup_game(data, seed)
         self._turns = 0
         self._scores: list[ScoreBreakdown] | None = None
+        if self._display is not None:
+            self._display.update(self._state)
 
     @property
     def state(self) -> GameState:
@@ -124,6 +139,8 @@ class StepRunner:
             return
         self._state = run_turn(self._state, self._agents, self._data)
         self._turns += 1
+        if self._display is not None:
+            self._display.update(self._state)
         if self._turns >= MAX_TURNS_PER_GAME:
             logger.warning(
                 "StepRunner reached safety cap of %d turns — forcing game_over",
