@@ -404,12 +404,18 @@ class BoardDisplay:
                 spent = p.livestock_cost * uses
                 parlour_parts.append(f"P{p.parlour_num}:{p.livestock_cost}LST({spent}spent)")
             parlour_str = "  ".join(parlour_parts)
+            _slot_names = ["Barn", "Dock", "Grnhs", "HQ"]
+            unlocked_str = " ".join(
+                f"[{_slot_names[i]}:{i + 1}STR]" if unlocked else f"({_slot_names[i]}:{i + 1}STR)"
+                for i, unlocked in enumerate(player.structures_unlocked)
+            )
             text = (
                 f"Player {pid}  (board {player.board_id})\n"
                 f"  Tokens: {player.cheese_tokens_remaining:>2}  "
                 f"Orders: {len(player.orders_completed)}\n"
                 f"  {' '.join(res_parts)}\n"
                 f"  {workers_str}\n"
+                f"  {unlocked_str}\n"
                 f"  {parlour_str}"
             )
             self._player_labels[pid].config(text=text)

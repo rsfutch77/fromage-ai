@@ -1,5 +1,5 @@
-board_id,structure_size_1,structure_size_2,structure_size_3,structure_size_4
-1,animal,cheese in fromagerie = order,gain up to 1 fruit per turn each time you gain frut,each deployed structure worth additional point
-2,structure,cheese in festival = animal,gain up to 1 order each time you gain an order,each fruit/jam worth additional point
-3,fruit,each cheese in villes = structure,gain up to 1 animal each time you gain an animal,each completed order worth additional point
-4,order,each cheese in bistro = fruit,gain up to 1 structure each time you gain an structure,each animal in parlour worth additional point
+board_id,structure_size_1,structure_size_1_cost,structure_size_2,structure_size_2_cost,structure_size_3,structure_size_3_cost,structure_size_4,structure_size_4_cost
+1,livestock,2,cheese in fromagerie = order,2,gain up to 1 fruit per turn each time you gain frut,3,each deployed structure worth additional point,5
+2,structure,1,cheese in festival = livestock,2,gain up to 1 order each time you gain an order,3,each fruit/jam worth additional point,5
+3,fruit,2,each cheese in villes = structure,1,gain up to 1 livestock each time you gain an animal,3,each completed order worth additional point,5
+4,order,2,each cheese in bistro = fruit,2,gain up to 1 structure each time you gain an structure,2,each livestock in parlour worth additional point,5

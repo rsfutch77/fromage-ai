@@ -18,7 +18,7 @@ import argparse
 import tkinter as tk
 
 from src.ai.random_agent import RandomAgent
-from src.game.board import setup_game
+from src.game.board import retrieve_workers, setup_game
 from src.game.data_loader import GameDataLoader
 from src.game.scoring import score_game, winner
 from src.game.simulation import run_placements, run_rotation
@@ -109,7 +109,7 @@ def main() -> None:
             next_state = run_placements(state, agents, data)
             history.append((_PHASE_ROTATE, next_state))
         else:
-            next_state = run_rotation(state)
+            next_state = retrieve_workers(run_rotation(state))
             history.append((_PHASE_PLACE, next_state))
             if next_state.game_over:
                 game_over = True
