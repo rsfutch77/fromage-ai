@@ -178,6 +178,23 @@ class BoardDisplay:
             width=3,
         )
 
+    def _draw_milking_parlour_marker(
+        self,
+        canvas: tk.Canvas,
+        row: int,
+        col: int,
+        player_id: int,
+    ) -> None:
+        """Draw a small diamond to mark a milking-parlour-placed token (no worker)."""
+        x1, y1, x2, y2 = self._cell_xy(row, col)
+        cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+        r = 5
+        colour = _PLAYER_COLOURS[player_id]
+        canvas.create_polygon(
+            cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy,
+            fill=colour, outline="white", width=1,
+        )
+
     def _draw_space(
         self,
         canvas: tk.Canvas,
@@ -236,24 +253,39 @@ class BoardDisplay:
         villes: dict[int, int] = {}
         festival: dict[tuple[int, int], int] = {}
 
-        # worker rings: same key spaces as cheese tokens
+        # worker rings (worker-placed tokens)
         w_fromag: dict[int, int] = {}
         w_bistro: dict[int, int] = {}
         w_villes: dict[int, int] = {}
         w_festival: dict[tuple[int, int], int] = {}
 
+        # milking parlour markers (token placed, no worker)
+        mp_fromag: dict[int, int] = {}
+        mp_bistro: dict[int, int] = {}
+        mp_villes: dict[int, int] = {}
+        mp_festival: dict[tuple[int, int], int] = {}
+
         for player in state.players:
             pid = player.player_id
             for pc in player.cheese_tokens_on_board:
                 vname = pc.venue.name
+                mp = pc.from_milking_parlour
                 if vname == "FROMAGERIE" and pc.space_id is not None:
                     fromag[pc.space_id] = pid
+                    if mp:
+                        mp_fromag[pc.space_id] = pid
                 elif vname == "BISTRO" and pc.space_id is not None:
                     bistro[pc.space_id] = pid
+                    if mp:
+                        mp_bistro[pc.space_id] = pid
                 elif vname == "VILLES" and pc.space_id is not None:
                     villes[pc.space_id] = pid
+                    if mp:
+                        mp_villes[pc.space_id] = pid
                 elif vname == "FESTIVAL" and pc.row is not None and pc.col is not None:
                     festival[(pc.row, pc.col)] = pid
+                    if mp:
+                        mp_festival[(pc.row, pc.col)] = pid
 
             for w in player.workers:
                 if w.location.name == "IN_HAND":
@@ -268,12 +300,12 @@ class BoardDisplay:
                 elif vname == "FESTIVAL" and w.row is not None and w.col is not None:
                     w_festival[(w.row, w.col)] = pid
 
-        self._redraw_fromagerie(fromag, w_fromag)
-        self._redraw_bistro(bistro, w_bistro)
-        self._redraw_villes(villes, w_villes)
-        self._redraw_festival(festival, w_festival)
+        self._redraw_fromagerie(fromag, w_fromag, mp_fromag)
+        self._redraw_bistro(bistro, w_bistro, mp_bistro)
+        self._redraw_villes(villes, w_villes, mp_villes)
+        self._redraw_festival(festival, w_festival, mp_festival)
 
-    def _redraw_fromagerie(self, occupied: dict[int, int], workers: dict[int, int]) -> None:
+    def _redraw_fromagerie(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int]) -> None:
         c = self._canvases["FROMAGERIE"]
         c.delete("all")
         cheese_col = {"SOFT": 0, "HARD": 1, "BLEU": 2}
@@ -287,8 +319,10 @@ class BoardDisplay:
             self._draw_space(c, row, col, fill, outline, pid, width=2 if pid is not None else 1)
             if space.space_id in workers:
                 self._draw_worker_ring(c, row, col, workers[space.space_id])
+            elif space.space_id in mp:
+                self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
 
-    def _redraw_bistro(self, occupied: dict[int, int], workers: dict[int, int]) -> None:
+    def _redraw_bistro(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int]) -> None:
         c = self._canvases["BISTRO"]
         c.delete("all")
         tables: dict[int, list] = defaultdict(list)
@@ -304,8 +338,10 @@ class BoardDisplay:
                 self._draw_space(c, row, col, fill, outline, pid, width=2 if pid is not None else 1)
                 if space.space_id in workers:
                     self._draw_worker_ring(c, row, col, workers[space.space_id])
+                elif space.space_id in mp:
+                    self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
 
-    def _redraw_villes(self, occupied: dict[int, int], workers: dict[int, int]) -> None:
+    def _redraw_villes(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int]) -> None:
         c = self._canvases["VILLES"]
         c.delete("all")
         for idx, space in enumerate(sorted(self._villes_spaces.values(),
@@ -317,8 +353,10 @@ class BoardDisplay:
             self._draw_space(c, row, col, fill, outline, pid, width=2 if pid is not None else 1)
             if space.space_id in workers:
                 self._draw_worker_ring(c, row, col, workers[space.space_id])
+            elif space.space_id in mp:
+                self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
 
-    def _redraw_festival(self, occupied: dict[tuple[int, int], int], workers: dict[tuple[int, int], int]) -> None:
+    def _redraw_festival(self, occupied: dict[tuple[int, int], int], workers: dict[tuple[int, int], int], mp: dict[tuple[int, int], int]) -> None:
         c = self._canvases["FESTIVAL"]
         c.delete("all")
         for (row, col), space in self._festival_spaces.items():
@@ -340,6 +378,8 @@ class BoardDisplay:
                                  width=2 if pid is not None else 1)
                 if (row, col) in workers:
                     self._draw_worker_ring(c, row - 1, col - 1, workers[(row, col)])
+                elif (row, col) in mp:
+                    self._draw_milking_parlour_marker(c, row - 1, col - 1, mp[(row, col)])
 
     def _update_sidebar(self, state: "GameState") -> None:
         _res = {"STRUCTURE": "STR", "LIVESTOCK": "LST", "FRUIT": "FRT", "ORDER": "ORD"}

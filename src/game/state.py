@@ -34,10 +34,11 @@ class PlacedCheese:
     age: AgeType
     venue: VenueType
     player_id: int
-    space_id: int | None = None      # Fromagerie, Bistro, Villes
-    row: int | None = None           # Festival grid
-    col: int | None = None           # Festival grid
-    table_id: int | None = None      # Bistro (denormalised convenience)
+    space_id: int | None = None           # Fromagerie, Bistro, Villes
+    row: int | None = None                # Festival grid
+    col: int | None = None                # Festival grid
+    table_id: int | None = None           # Bistro (denormalised convenience)
+    from_milking_parlour: bool = False    # True when placed via milking parlour (no worker sent)
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +155,7 @@ def _placed_cheese_to_dict(pc: PlacedCheese) -> dict:
         "row": pc.row,
         "col": pc.col,
         "table_id": pc.table_id,
+        "from_milking_parlour": pc.from_milking_parlour,
     }
 
 
@@ -167,6 +169,7 @@ def _placed_cheese_from_dict(d: dict) -> PlacedCheese:
         row=d.get("row"),
         col=d.get("col"),
         table_id=d.get("table_id"),
+        from_milking_parlour=d.get("from_milking_parlour", False),
     )
 
 

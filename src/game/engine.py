@@ -459,7 +459,7 @@ def _apply_milking_parlour_inplace(
         _deduct_fruit_inplace(player, sp.fruit_requirement)
         placed = PlacedCheese(
             cheese_type=cheese_type, age=age, venue=VenueType.FESTIVAL, player_id=player_id,
-            row=action.target_row, col=action.target_col,
+            row=action.target_row, col=action.target_col, from_milking_parlour=True,
         )
     else:
         venue = action.target_venue
@@ -482,7 +482,7 @@ def _apply_milking_parlour_inplace(
         _deduct_fruit_inplace(player, fruit_req)
         placed = PlacedCheese(
             cheese_type=cheese_type, age=age, venue=venue, player_id=player_id,
-            space_id=action.target_space_id, table_id=table_id,
+            space_id=action.target_space_id, table_id=table_id, from_milking_parlour=True,
         )
 
     # No worker is placed for milking parlour actions
