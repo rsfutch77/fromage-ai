@@ -454,9 +454,6 @@ def legal_milking_parlour_actions(
     # Gather individually usable parlours with their target options.
     usable: list[tuple] = []  # (parlour, [target_tuples])
     for parlour in player_parlours:
-        idx = parlour.parlour_num - 1
-        if player.milking_parlours_used[idx]:
-            continue
         if parlour.livestock_cost > available_livestock:
             continue
         targets = _valid_parlour_targets(parlour, occupied, data, facing_venue)

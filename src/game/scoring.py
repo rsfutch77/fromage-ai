@@ -318,8 +318,7 @@ def score_headquarters(
         for parlour in data.milking_parlours:
             if parlour.board_id == player.board_id:
                 idx = parlour.parlour_num - 1
-                if player.milking_parlours_used[idx]:
-                    total += parlour.livestock_cost
+                total += parlour.livestock_cost * player.milking_parlours_used[idx]
         return total
 
     logger.warning("Unknown headquarters_condition '%s' for board %d — returning 0",

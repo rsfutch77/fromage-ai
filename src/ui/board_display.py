@@ -68,6 +68,12 @@ class BoardDisplay:
         self._bistro_spaces  = {s.space_id: s for s in data.bistro_spaces}
         self._villes_spaces  = {s.space_id: s for s in data.villes_spaces}
         self._festival_spaces = {(s.row, s.col): s for s in data.festival_spaces}
+        # parlours[board_id] = list of MilkingParlour sorted by parlour_num
+        self._parlours: dict[int, list] = {}
+        for p in data.milking_parlours:
+            self._parlours.setdefault(p.board_id, []).append(p)
+        for lst in self._parlours.values():
+            lst.sort(key=lambda p: p.parlour_num)
 
         fest = data.festival_spaces
         self._fest_rows = max(s.row for s in fest)
@@ -242,9 +248,10 @@ class BoardDisplay:
         for venue_idx, venue in enumerate(VENUE_ORDER):
             # which player currently faces this venue?
             player_id = (venue_idx - state.rotation_index) % 4
+            resource = state.resource_facing(player_id).name.capitalize()
             colour = _PLAYER_COLOURS[player_id]
             self._quad_labels[venue.name].config(
-                text=f"← Player {player_id}", fg=colour,
+                text=f"← Player {player_id}  ·  {resource}", fg=colour,
             )
 
     def _update_venues(self, state: "GameState") -> None:
@@ -390,11 +397,19 @@ class BoardDisplay:
                 f"{'●' if w.location.name == 'IN_HAND' else '○'}{w.cheese_type.name[0]}"
                 for w in player.workers
             )
+            parlours = self._parlours.get(player.board_id, [])
+            parlour_parts = []
+            for p in parlours:
+                uses = player.milking_parlours_used[p.parlour_num - 1]
+                spent = p.livestock_cost * uses
+                parlour_parts.append(f"P{p.parlour_num}:{p.livestock_cost}LST({spent}spent)")
+            parlour_str = "  ".join(parlour_parts)
             text = (
                 f"Player {pid}  (board {player.board_id})\n"
                 f"  Tokens: {player.cheese_tokens_remaining:>2}  "
                 f"Orders: {len(player.orders_completed)}\n"
                 f"  {' '.join(res_parts)}\n"
-                f"  {workers_str}"
+                f"  {workers_str}\n"
+                f"  {parlour_str}"
             )
             self._player_labels[pid].config(text=text)

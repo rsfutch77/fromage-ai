@@ -202,16 +202,17 @@ def test_greenhouse_fires_once_per_turn(data, state):
 # Milking parlour slot-used flag (req 4.7.2)
 # ---------------------------------------------------------------------------
 
-def test_milking_parlour_marks_used_and_raises_on_reuse(data, state):
-    """Milking parlour marks slot used and raises IllegalActionError on reuse."""
+def test_milking_parlour_increments_use_count_and_allows_reuse(data, state):
+    """Milking parlour increments the use count and can be used more than once."""
     new = copy.deepcopy(state)
     player = new.players[0]
     parlours = [p for p in data.milking_parlours if p.board_id == player.board_id]
     if not parlours:
         pytest.skip("No parlours for this player board")
     parlour = parlours[0]
-    player.resources[ResourceType.LIVESTOCK] = parlour.livestock_cost + 10
-    player.resources[ResourceType.FRUIT] = 5  # cover any fruit requirement on the target space
+    player.resources[ResourceType.LIVESTOCK] = parlour.livestock_cost * 3 + 10
+    player.resources[ResourceType.FRUIT] = 5
+    player.cheese_tokens_remaining = 10
 
     # Build a target space
     cheese_type = parlour.bonus_cheese_type
@@ -235,7 +236,19 @@ def test_milking_parlour_marks_used_and_raises_on_reuse(data, state):
         target_space_id=target_sid,
     )
     new2 = apply_milking_parlour(new, 0, action, data)
-    assert new2.players[0].milking_parlours_used[parlour.parlour_num - 1] is True
+    assert new2.players[0].milking_parlours_used[parlour.parlour_num - 1] == 1
 
-    with pytest.raises(IllegalActionError):
-        apply_milking_parlour(new2, 0, action, data)
+    # Use a different target space so the second use doesn't collide
+    other_spaces = [s for s in data.fromagerie_spaces
+                    if s.cheese_type == cheese_type and s.age == age and s.space_id != target_sid]
+    if not other_spaces:
+        pytest.skip("No second matching fromagerie space for reuse test")
+    action2 = MilkingParlourAction(
+        parlour_num=parlour.parlour_num,
+        chosen_cheese_type=cheese_type,
+        chosen_age=age,
+        target_venue=VenueType.FROMAGERIE,
+        target_space_id=other_spaces[0].space_id,
+    )
+    new3 = apply_milking_parlour(new2, 0, action2, data)
+    assert new3.players[0].milking_parlours_used[parlour.parlour_num - 1] == 2

@@ -80,7 +80,7 @@ class PlayerState:
     order_cards_held: list[OrderCard] = field(default_factory=list)
     orders_completed: list[OrderCard] = field(default_factory=list)
     structures_unlocked: list[bool] = field(default_factory=lambda: [False, False, False, False])  # slot 1–4
-    milking_parlours_used: list[bool] = field(default_factory=lambda: [False, False, False, False])
+    milking_parlours_used: list[int] = field(default_factory=lambda: [0, 0, 0, 0])  # use count per parlour slot
     fruit_spent_on_fruited: int = 0
     fruit_spent_on_jam: int = 0
 

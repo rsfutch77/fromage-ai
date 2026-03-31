@@ -438,15 +438,13 @@ def _apply_milking_parlour_inplace(
     parlour = _get_milking_parlour(data, player.board_id, action.parlour_num)
 
     idx = action.parlour_num - 1
-    if player.milking_parlours_used[idx]:
-        raise IllegalActionError(f"Milking parlour {action.parlour_num} already used this game")
     if player.resources.get(ResourceType.LIVESTOCK, 0) < parlour.livestock_cost:
         raise IllegalActionError(f"Not enough Livestock for milking parlour {action.parlour_num}")
     if player.cheese_tokens_remaining <= 0:
         raise IllegalActionError(f"Player {player_id} has no cheese tokens remaining")
 
     player.resources[ResourceType.LIVESTOCK] -= parlour.livestock_cost
-    player.milking_parlours_used[idx] = True
+    player.milking_parlours_used[idx] += 1
 
     # Resolve cheese type/age (wild parlour → use chosen; else use parlour's fixed type)
     cheese_type = action.chosen_cheese_type if parlour.bonus_cheese_type is None else parlour.bonus_cheese_type

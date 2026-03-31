@@ -178,14 +178,12 @@ class TestLegalMilkingParlour:
         combos = legal_milking_parlour_actions(fresh_state, 0, data)
         assert [] in combos
 
-    def test_already_used_parlour_excluded(self, fresh_state, data):
-        """A parlour already used this game is excluded."""
+    def test_parlour_excluded_when_insufficient_livestock(self, fresh_state, data):
+        """A parlour is excluded when the player cannot afford its livestock cost."""
         import copy
         state = copy.deepcopy(fresh_state)
-        # Give lots of livestock.
-        state.players[0].resources[ResourceType.LIVESTOCK] = 10
-        # Mark all parlours as used.
-        state.players[0].milking_parlours_used = [True, True, True, True]
+        # Zero livestock — no parlour should be usable.
+        state.players[0].resources[ResourceType.LIVESTOCK] = 0
 
         combos = legal_milking_parlour_actions(state, 0, data)
         assert combos == [[]]
