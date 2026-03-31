@@ -161,6 +161,23 @@ class BoardDisplay:
 
     # ── token drawing ──────────────────────────────────────────────────────
 
+    def _draw_worker_ring(
+        self,
+        canvas: tk.Canvas,
+        row: int,
+        col: int,
+        player_id: int,
+    ) -> None:
+        """Draw a thick coloured ring inside the cell to mark a placed worker."""
+        x1, y1, x2, y2 = self._cell_xy(row, col)
+        inset = 3
+        canvas.create_rectangle(
+            x1 + inset, y1 + inset, x2 - inset, y2 - inset,
+            outline=_PLAYER_COLOURS[player_id],
+            fill="",
+            width=3,
+        )
+
     def _draw_space(
         self,
         canvas: tk.Canvas,
@@ -219,6 +236,12 @@ class BoardDisplay:
         villes: dict[int, int] = {}
         festival: dict[tuple[int, int], int] = {}
 
+        # worker rings: same key spaces as cheese tokens
+        w_fromag: dict[int, int] = {}
+        w_bistro: dict[int, int] = {}
+        w_villes: dict[int, int] = {}
+        w_festival: dict[tuple[int, int], int] = {}
+
         for player in state.players:
             pid = player.player_id
             for pc in player.cheese_tokens_on_board:
@@ -232,12 +255,25 @@ class BoardDisplay:
                 elif vname == "FESTIVAL" and pc.row is not None and pc.col is not None:
                     festival[(pc.row, pc.col)] = pid
 
-        self._redraw_fromagerie(fromag)
-        self._redraw_bistro(bistro)
-        self._redraw_villes(villes)
-        self._redraw_festival(festival)
+            for w in player.workers:
+                if w.location.name == "IN_HAND":
+                    continue
+                vname = w.venue.name if w.venue else None
+                if vname == "FROMAGERIE" and w.space_id is not None:
+                    w_fromag[w.space_id] = pid
+                elif vname == "BISTRO" and w.space_id is not None:
+                    w_bistro[w.space_id] = pid
+                elif vname == "VILLES" and w.space_id is not None:
+                    w_villes[w.space_id] = pid
+                elif vname == "FESTIVAL" and w.row is not None and w.col is not None:
+                    w_festival[(w.row, w.col)] = pid
 
-    def _redraw_fromagerie(self, occupied: dict[int, int]) -> None:
+        self._redraw_fromagerie(fromag, w_fromag)
+        self._redraw_bistro(bistro, w_bistro)
+        self._redraw_villes(villes, w_villes)
+        self._redraw_festival(festival, w_festival)
+
+    def _redraw_fromagerie(self, occupied: dict[int, int], workers: dict[int, int]) -> None:
         c = self._canvases["FROMAGERIE"]
         c.delete("all")
         cheese_col = {"SOFT": 0, "HARD": 1, "BLEU": 2}
@@ -249,8 +285,10 @@ class BoardDisplay:
             pid = occupied.get(space.space_id)
             fill = _CHEESE_FILL.get(space.cheese_type.name, _EMPTY_FILL) if pid is not None else _EMPTY_FILL
             self._draw_space(c, row, col, fill, outline, pid, width=2 if pid is not None else 1)
+            if space.space_id in workers:
+                self._draw_worker_ring(c, row, col, workers[space.space_id])
 
-    def _redraw_bistro(self, occupied: dict[int, int]) -> None:
+    def _redraw_bistro(self, occupied: dict[int, int], workers: dict[int, int]) -> None:
         c = self._canvases["BISTRO"]
         c.delete("all")
         tables: dict[int, list] = defaultdict(list)
@@ -264,8 +302,10 @@ class BoardDisplay:
                 pid = occupied.get(space.space_id)
                 fill = _CHEESE_FILL.get(space.cheese_type.name, _EMPTY_FILL) if pid is not None else _EMPTY_FILL
                 self._draw_space(c, row, col, fill, outline, pid, width=2 if pid is not None else 1)
+                if space.space_id in workers:
+                    self._draw_worker_ring(c, row, col, workers[space.space_id])
 
-    def _redraw_villes(self, occupied: dict[int, int]) -> None:
+    def _redraw_villes(self, occupied: dict[int, int], workers: dict[int, int]) -> None:
         c = self._canvases["VILLES"]
         c.delete("all")
         for idx, space in enumerate(sorted(self._villes_spaces.values(),
@@ -275,8 +315,10 @@ class BoardDisplay:
             pid = occupied.get(space.space_id)
             fill = _CHEESE_FILL.get(space.cheese_type.name, _EMPTY_FILL) if pid is not None else _EMPTY_FILL
             self._draw_space(c, row, col, fill, outline, pid, width=2 if pid is not None else 1)
+            if space.space_id in workers:
+                self._draw_worker_ring(c, row, col, workers[space.space_id])
 
-    def _redraw_festival(self, occupied: dict[tuple[int, int], int]) -> None:
+    def _redraw_festival(self, occupied: dict[tuple[int, int], int], workers: dict[tuple[int, int], int]) -> None:
         c = self._canvases["FESTIVAL"]
         c.delete("all")
         for (row, col), space in self._festival_spaces.items():
@@ -296,6 +338,8 @@ class BoardDisplay:
                 )
                 self._draw_space(c, row - 1, col - 1, fill, outline, pid,
                                  width=2 if pid is not None else 1)
+                if (row, col) in workers:
+                    self._draw_worker_ring(c, row - 1, col - 1, workers[(row, col)])
 
     def _update_sidebar(self, state: "GameState") -> None:
         _res = {"STRUCTURE": "STR", "LIVESTOCK": "LST", "FRUIT": "FRT", "ORDER": "ORD"}

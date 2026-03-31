@@ -52,6 +52,8 @@ class Worker:
     location: WorkerLocation = WorkerLocation.IN_HAND
     venue: VenueType | None = None
     space_id: int | None = None
+    row: int | None = None   # Festival grid row (when venue == FESTIVAL)
+    col: int | None = None   # Festival grid col (when venue == FESTIVAL)
     return_after_rotation: int | None = None
 
     def is_available(self, current_rotation: int) -> bool:
@@ -175,6 +177,8 @@ def _worker_to_dict(w: Worker) -> dict:
         "location": w.location.name,
         "venue": w.venue.name if w.venue else None,
         "space_id": w.space_id,
+        "row": w.row,
+        "col": w.col,
         "return_after_rotation": w.return_after_rotation,
     }
 
@@ -186,6 +190,8 @@ def _worker_from_dict(d: dict) -> Worker:
         location=WorkerLocation[d["location"]],
         venue=VenueType[d["venue"]] if d["venue"] else None,
         space_id=d.get("space_id"),
+        row=d.get("row"),
+        col=d.get("col"),
         return_after_rotation=d.get("return_after_rotation"),
     )
 

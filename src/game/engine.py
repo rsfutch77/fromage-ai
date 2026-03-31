@@ -278,6 +278,8 @@ def _place_token_inplace(
         worker.location = WorkerLocation.ON_CHEESE_SPACE
         worker.venue = placed.venue
         worker.space_id = placed.space_id
+        worker.row = placed.row
+        worker.col = placed.col
         worker.return_after_rotation = (state.rotation_index + space_age.turns) % 4
 
     _check_order_completion_inplace(player, placed)
