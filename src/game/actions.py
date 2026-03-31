@@ -301,8 +301,9 @@ def _is_affordable(
         avail[rtype] = avail.get(rtype, 0) + gather.resource_space
 
     # Unlock structure costs (Structure tokens)
+    board_struct = next(b for b in data.player_board_structures if b.board_id == player.board_id)
     for ua in unlock_actions:
-        avail[ResourceType.STRUCTURE] -= ua.slot
+        avail[ResourceType.STRUCTURE] -= board_struct.structure_costs[ua.slot - 1]
         if avail[ResourceType.STRUCTURE] < 0:
             return False
 
@@ -496,22 +497,23 @@ def legal_milking_parlour_actions(
 def legal_unlock_actions(
     state: GameState,
     player_id: int,
+    data: "GameDataLoader",
 ) -> list[list[UnlockStructureAction]]:
     """Return all affordable structure unlock subsets for *player_id*.
 
     Always includes the empty list (no unlock).
-    Structures may be unlocked in any order; slot N costs N Structure tokens.
     Returns every affordable subset of currently-locked slots.
     """
     player = state.players[player_id]
     available = player.resources.get(ResourceType.STRUCTURE, 0)
+    board_struct = next(b for b in data.player_board_structures if b.board_id == player.board_id)
 
     locked = [slot for slot in range(1, 5) if not player.structures_unlocked[slot - 1]]
 
     result: list[list[UnlockStructureAction]] = [[]]
     for size in range(1, len(locked) + 1):
         for subset in combinations(locked, size):
-            if sum(subset) <= available:
+            if sum(board_struct.structure_costs[s - 1] for s in subset) <= available:
                 result.append([UnlockStructureAction(slot=s) for s in subset])
 
     return result
@@ -592,7 +594,7 @@ def all_legal_turn_actions(
     """
     gather_choices = legal_gather_actions(state, player_id, data)
     parlour_combos = legal_milking_parlour_actions(state, player_id, data)
-    unlock_seqs = legal_unlock_actions(state, player_id)
+    unlock_seqs = legal_unlock_actions(state, player_id, data)
 
     player = state.players[player_id]
     results: list[TurnAction] = []

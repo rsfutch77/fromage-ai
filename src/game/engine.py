@@ -491,10 +491,11 @@ def apply_unlock_structure(
     state: GameState,
     player_id: int,
     action: UnlockStructureAction,
+    data: GameDataLoader,
 ) -> GameState:
     """Return a new GameState after unlocking a structure slot."""
     new = copy.deepcopy(state)
-    _apply_unlock_structure_inplace(new, player_id, action)
+    _apply_unlock_structure_inplace(new, player_id, action, data)
     return new
 
 
@@ -502,13 +503,14 @@ def _apply_unlock_structure_inplace(
     state: GameState,
     player_id: int,
     action: UnlockStructureAction,
+    data: GameDataLoader,
 ) -> None:
     """Mutate *state*: spend Structure tokens to unlock slot *action.slot*."""
     player = state.players[player_id]
     idx = action.slot - 1
     if player.structures_unlocked[idx]:
         raise IllegalActionError(f"Structure slot {action.slot} is already unlocked")
-    cost = action.slot
+    cost = _get_board_struct(data, player.board_id).structure_costs[idx]
     if player.resources.get(ResourceType.STRUCTURE, 0) < cost:
         raise IllegalActionError(
             f"Not enough Structure tokens to unlock slot {action.slot} (cost {cost})"
@@ -535,7 +537,7 @@ def apply_turn(
         _apply_gather_inplace(new, player_id, action.gather, data, ctx)
 
     for ua in action.unlock_structures:
-        _apply_unlock_structure_inplace(new, player_id, ua)
+        _apply_unlock_structure_inplace(new, player_id, ua, data)
 
     for mc in action.make_cheese:
         _apply_make_cheese_inplace(new, player_id, mc, data, ctx)

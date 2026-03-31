@@ -85,6 +85,7 @@ class PlayerBoardStructure:
     loading_dock_reward: ResourceType
     greenhouse_resource: ResourceType
     headquarters_condition: str
+    structure_costs: list[int]  # [cost_slot1, cost_slot2, cost_slot3, cost_slot4]
 
 
 @dataclass
@@ -360,6 +361,12 @@ class GameDataLoader:
                 dock_venue, dock_reward = _parse_loading_dock(row["structure_size_2"])
                 greenhouse_resource = _parse_greenhouse(row["structure_size_3"])
                 hq_condition = row["structure_size_4"].strip()
+                costs = [
+                    int(row["structure_size_1_cost"]),
+                    int(row["structure_size_2_cost"]),
+                    int(row["structure_size_3_cost"]),
+                    int(row["structure_size_4_cost"]),
+                ]
                 result.append(PlayerBoardStructure(
                     board_id=int(row["board_id"]),
                     barn_resource=barn_resource,
@@ -367,6 +374,7 @@ class GameDataLoader:
                     loading_dock_reward=dock_reward,
                     greenhouse_resource=greenhouse_resource,
                     headquarters_condition=hq_condition,
+                    structure_costs=costs,
                 ))
             self._cache["player_board_structures"] = result
         return self._cache["player_board_structures"]  # type: ignore[return-value]

@@ -197,18 +197,22 @@ class TestLegalUnlockActions:
         state.players[0].resources[ResourceType.STRUCTURE] = 0
         state.players[0].structures_unlocked = [False, False, False, False]
 
-        seqs = legal_unlock_actions(state, 0)
+        seqs = legal_unlock_actions(state, 0, data)
         assert seqs == [[]]
 
-    def test_one_structure_unlocks_slot_1(self, fresh_state, data):
-        """With 1 Structure resource and no slots unlocked, can unlock slot 1."""
+    def test_exact_cost_unlocks_cheapest_slot(self, fresh_state, data):
+        """With exactly the cheapest slot's cost in Structure, that slot is unlockable."""
         import copy
         state = copy.deepcopy(fresh_state)
-        state.players[0].resources[ResourceType.STRUCTURE] = 1
+        board_struct = next(b for b in data.player_board_structures
+                            if b.board_id == state.players[0].board_id)
+        cheapest_slot = min(range(1, 5), key=lambda s: board_struct.structure_costs[s - 1])
+        cheapest_cost = board_struct.structure_costs[cheapest_slot - 1]
+        state.players[0].resources[ResourceType.STRUCTURE] = cheapest_cost
         state.players[0].structures_unlocked = [False, False, False, False]
 
-        seqs = legal_unlock_actions(state, 0)
-        assert [UnlockStructureAction(slot=1)] in seqs
+        seqs = legal_unlock_actions(state, 0, data)
+        assert [UnlockStructureAction(slot=cheapest_slot)] in seqs
 
     def test_any_order_unlock_allowed(self, fresh_state, data):
         """Slot 3 can be unlocked even if slots 1 and 2 are not yet unlocked."""
@@ -217,7 +221,7 @@ class TestLegalUnlockActions:
         state.players[0].resources[ResourceType.STRUCTURE] = 10
         state.players[0].structures_unlocked = [False, False, False, False]
 
-        seqs = legal_unlock_actions(state, 0)
+        seqs = legal_unlock_actions(state, 0, data)
         slot_sets = [frozenset(a.slot for a in seq) for seq in seqs]
         # Slot 3 alone should be a valid choice.
         assert frozenset({3}) in slot_sets
@@ -229,12 +233,12 @@ class TestLegalUnlockActions:
         state.players[0].resources[ResourceType.STRUCTURE] = 10
         state.players[0].structures_unlocked = [True, False, False, False]  # slot 1 done
 
-        seqs = legal_unlock_actions(state, 0)
+        seqs = legal_unlock_actions(state, 0, data)
         for seq in seqs:
             assert all(a.slot != 1 for a in seq)
 
     def test_empty_always_present(self, fresh_state, data):
-        seqs = legal_unlock_actions(fresh_state, 0)
+        seqs = legal_unlock_actions(fresh_state, 0, data)
         assert [] in seqs
 
     def test_cannot_exceed_slot_4(self, data):
@@ -245,6 +249,6 @@ class TestLegalUnlockActions:
         state.players[0].resources[ResourceType.STRUCTURE] = 100
         state.players[0].structures_unlocked = [False, False, False, False]
 
-        seqs = legal_unlock_actions(state, 0)
+        seqs = legal_unlock_actions(state, 0, data)
         for seq in seqs:
             assert all(a.slot <= 4 for a in seq)

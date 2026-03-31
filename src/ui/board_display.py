@@ -74,6 +74,10 @@ class BoardDisplay:
             self._parlours.setdefault(p.board_id, []).append(p)
         for lst in self._parlours.values():
             lst.sort(key=lambda p: p.parlour_num)
+        # structure_costs[board_id] = [cost_slot1, ..., cost_slot4]
+        self._structure_costs: dict[int, list[int]] = {
+            b.board_id: b.structure_costs for b in data.player_board_structures
+        }
 
         fest = data.festival_spaces
         self._fest_rows = max(s.row for s in fest)
@@ -405,8 +409,9 @@ class BoardDisplay:
                 parlour_parts.append(f"P{p.parlour_num}:{p.livestock_cost}LST({spent}spent)")
             parlour_str = "  ".join(parlour_parts)
             _slot_names = ["Barn", "Dock", "Grnhs", "HQ"]
+            costs = self._structure_costs.get(player.board_id, [1, 2, 3, 4])
             unlocked_str = " ".join(
-                f"[{_slot_names[i]}:{i + 1}STR]" if unlocked else f"({_slot_names[i]}:{i + 1}STR)"
+                f"[{_slot_names[i]}:{costs[i]}STR]" if unlocked else f"({_slot_names[i]}:{costs[i]}STR)"
                 for i, unlocked in enumerate(player.structures_unlocked)
             )
             text = (
