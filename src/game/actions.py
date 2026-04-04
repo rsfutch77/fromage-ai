@@ -48,10 +48,12 @@ _HQ_IDX = 3            # slot 4
 class GatherAction:
     """Place a worker on the Resource Tile to gather resources.
 
-    resource_space: 1, 2, or 3 — the numbered slot on the Resource Tile.
+    resource_space: Bronze, Silver, or Gold — the age tier of the space.
+        Bronze = 1 resource / 1 rotation away; Silver = 2; Gold = 3.
     use_barn: if True, also place a worker on the Barn (requires Barn unlocked).
+    Worker type (Soft/Hard/Bleu) does not matter when gathering.
     """
-    resource_space: int   # 1, 2, or 3
+    resource_space: AgeType
     use_barn: bool = False
 
 
@@ -298,7 +300,7 @@ def _is_affordable(
     # Apply gather gain
     if gather is not None:
         rtype = state.resource_facing(player_id)
-        avail[rtype] = avail.get(rtype, 0) + gather.resource_space
+        avail[rtype] = avail.get(rtype, 0) + gather.resource_space.turns
 
     # Unlock structure costs (Structure tokens)
     board_struct = next(b for b in data.player_board_structures if b.board_id == player.board_id)
@@ -355,7 +357,7 @@ def legal_gather_actions(
     workers_in_hand = [w for w in player.workers if w.location == WorkerLocation.IN_HAND]
     n_in_hand = len(workers_in_hand)
 
-    # Find which resource spaces (1-3) this player already occupies.
+    # Find which resource spaces (stored as .turns int) this player already occupies.
     occupied_spaces: set[int] = set()
     for worker in player.workers:
         if worker.location == WorkerLocation.ON_RESOURCE_TILE and worker.space_id is not None:
@@ -366,8 +368,8 @@ def legal_gather_actions(
     if n_in_hand == 0:
         return actions  # No worker available to place on the resource tile.
 
-    for space in (1, 2, 3):
-        if space in occupied_spaces:
+    for space in AgeType:
+        if space.turns in occupied_spaces:
             continue
         actions.append(GatherAction(resource_space=space, use_barn=False))
         # Barn requires a second worker in hand (one for resource tile, one for barn).
@@ -604,7 +606,7 @@ def all_legal_turn_actions(
         # Remaining types may each place one worker on a cheese space.
         available_for_cheese: set[CheeseType] = _workers_available_after_gather(player, gc)
 
-        extra_fruit = (gc.resource_space if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
+        extra_fruit = (gc.resource_space.turns if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
         all_cheese = legal_make_cheese_actions(state, player_id, data, extra_fruit)
         cheese_combos = _legal_cheese_combos(
             available_for_cheese, all_cheese, player.cheese_tokens_remaining

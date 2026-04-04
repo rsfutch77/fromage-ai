@@ -204,12 +204,12 @@ def _apply_gather_inplace(
 
     gather_worker.location = WorkerLocation.ON_RESOURCE_TILE
     gather_worker.venue = None
-    gather_worker.space_id = action.resource_space
-    gather_worker.return_after_rotation = (state.rotation_index + action.resource_space) % 4
+    gather_worker.space_id = action.resource_space.turns  # 1/2/3 for Bronze/Silver/Gold
+    gather_worker.return_after_rotation = (state.rotation_index + action.resource_space.turns) % 4
 
     # Gain the resource facing this player
     resource = state.resource_facing(player_id)
-    _gain_resource_inplace(state, player_id, resource, action.resource_space, data, ctx)
+    _gain_resource_inplace(state, player_id, resource, action.resource_space.turns, data, ctx)
 
     # Barn: place a second worker and gain 1 of the board's barn resource
     if action.use_barn and player.structures_unlocked[_BARN_IDX]:

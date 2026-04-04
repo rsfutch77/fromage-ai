@@ -19,6 +19,7 @@ from src.game.board import setup_game
 from src.game.data_loader import GameDataLoader
 from src.game.state import GameState, PlayerState, Worker
 from src.game.types import (
+    AgeType,
     CheeseType,
     ResourceType,
     VenueType,
@@ -142,7 +143,7 @@ class TestLegalGatherActions:
         actions = legal_gather_actions(state, 0, data)
         for a in actions:
             if a is not None:
-                assert a.resource_space != 2
+                assert a.resource_space != AgeType.SILVER
 
     def test_barn_excluded_when_not_unlocked(self, fresh_state, data):
         """use_barn=True actions are absent when Barn is not unlocked."""

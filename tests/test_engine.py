@@ -61,21 +61,21 @@ def _give_all_workers_in_hand(player):
 # ---------------------------------------------------------------------------
 
 def test_gather_sets_worker_return_rotation(data, state):
-    """Worker return_after_rotation = (rotation_index + space) % 4."""
-    action = GatherAction(resource_space=2)
+    """Worker return_after_rotation = (rotation_index + space.turns) % 4."""
+    action = GatherAction(resource_space=AgeType.SILVER)
     new = apply_gather(state, 0, action, data)
     deployed = [w for w in new.players[0].workers
                 if w.location == WorkerLocation.ON_RESOURCE_TILE]
     assert len(deployed) == 1
-    assert deployed[0].return_after_rotation == (state.rotation_index + 2) % 4
-    assert deployed[0].space_id == 2
+    assert deployed[0].return_after_rotation == (state.rotation_index + AgeType.SILVER.turns) % 4
+    assert deployed[0].space_id == AgeType.SILVER.turns
 
 
 def test_gather_adds_resources(data, state):
-    """Gathering space N adds N resources of the facing type (before greenhouse)."""
+    """Gathering Gold space adds 3 resources of the facing type (before greenhouse)."""
     resource = state.resource_facing(0)
     before = state.players[0].resources.get(resource, 0)
-    new = apply_gather(state, 0, GatherAction(resource_space=3), data)
+    new = apply_gather(state, 0, GatherAction(resource_space=AgeType.GOLD), data)
     after = new.players[0].resources.get(resource, 0)
     # At least +3; greenhouse may add 1 more
     assert after >= before + 3
@@ -83,7 +83,7 @@ def test_gather_adds_resources(data, state):
 
 def test_gather_does_not_mutate_input(data, state):
     original = dict(state.players[0].resources)
-    apply_gather(state, 0, GatherAction(resource_space=1), data)
+    apply_gather(state, 0, GatherAction(resource_space=AgeType.BRONZE), data)
     assert state.players[0].resources == original
 
 

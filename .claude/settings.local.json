@@ -6,7 +6,8 @@
       "Bash(python -m pytest tests/ -x -q)",
       "Bash(python -m pytest tests/test_board.py tests/test_engine.py -q)",
       "Bash(python -m pytest tests/ -q)",
-      "Bash(python debug_turn1.py)"
+      "Bash(python debug_turn1.py)",
+      "Bash(python -m pytest tests/test_actions.py tests/test_engine.py -x -q)"
     ]
   }
 }
