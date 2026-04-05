@@ -37,8 +37,9 @@ _CHEESE_FILL: dict[str, str] = {
     "BLEU": "#90CAF9",   # sky blue
     "FREE": "#C8E6C9",   # free-sample: pale green
 }
-_EMPTY_FILL    = "#EEEEEE"
-_EMPTY_OUTLINE = "#BDBDBD"
+_EMPTY_FILL     = "#EEEEEE"
+_EMPTY_OUTLINE  = "#BDBDBD"
+_RESOURCE_FILL  = "#E8EAF6"   # lavender tint for resource-tile spaces
 
 # Age → border colour
 _AGE_OUTLINE: dict[str, str] = {
@@ -110,10 +111,10 @@ class BoardDisplay:
         venues = ["FROMAGERIE", "BISTRO", "VILLES", "FESTIVAL"]
         positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
         canvas_dims = {
-            "FROMAGERIE": (3, 6),   # (cols, rows) in cell-grid units
-            "BISTRO":     (2, 9),
-            "VILLES":     (3, 6),
-            "FESTIVAL":   (self._fest_cols, self._fest_rows),
+            "FROMAGERIE": (3, 7),   # (cols, rows): 6 cheese rows + 1 resource row
+            "BISTRO":     (3, 10),  # 9 table rows + 1 resource row (widened to 3)
+            "VILLES":     (3, 7),   # 6 city rows + 1 resource row
+            "FESTIVAL":   (self._fest_cols, self._fest_rows + 1),  # + 1 resource row
         }
 
         self._quad_labels: dict[str, tk.Label] = {}
@@ -205,6 +206,31 @@ class BoardDisplay:
             fill=colour, outline="white", width=1,
         )
 
+    def _draw_resource_row(
+        self,
+        canvas: tk.Canvas,
+        row_idx: int,
+        resource_workers: dict[int, int],
+    ) -> None:
+        """Draw the 3 resource-tile spaces (Bronze=1, Silver=2, Gold=3) at *row_idx*.
+
+        resource_workers maps space_id (1/2/3) → player_id when a worker occupies it.
+        """
+        for col, (age_name, amount) in enumerate(
+            [("BRONZE", 1), ("SILVER", 2), ("GOLD", 3)]
+        ):
+            outline = _AGE_OUTLINE[age_name]
+            self._draw_space(canvas, row_idx, col, _RESOURCE_FILL, outline, width=2)
+            pid = resource_workers.get(amount)
+            if pid is not None:
+                self._draw_worker_ring(canvas, row_idx, col, pid)
+            x1, y1, x2, y2 = self._cell_xy(row_idx, col)
+            cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
+            canvas.create_text(
+                cx, cy, text=str(amount),
+                font=("Helvetica", 9, "bold"), fill="#3949AB",
+            )
+
     def _draw_space(
         self,
         canvas: tk.Canvas,
@@ -259,6 +285,8 @@ class BoardDisplay:
             )
 
     def _update_venues(self, state: "GameState") -> None:
+        from src.game.types import VENUE_ORDER
+
         fromag: dict[int, int] = {}
         bistro: dict[int, int] = {}
         villes: dict[int, int] = {}
@@ -275,6 +303,9 @@ class BoardDisplay:
         mp_bistro: dict[int, int] = {}
         mp_villes: dict[int, int] = {}
         mp_festival: dict[tuple[int, int], int] = {}
+
+        # resource tile workers: player_id → set of space_ids occupied (1/2/3)
+        resource_on_tile: dict[int, set[int]] = {0: set(), 1: set(), 2: set(), 3: set()}
 
         for player in state.players:
             pid = player.player_id
@@ -301,6 +332,9 @@ class BoardDisplay:
             for w in player.workers:
                 if w.location.name == "IN_HAND":
                     continue
+                if w.location.name == "ON_RESOURCE_TILE" and w.space_id is not None:
+                    resource_on_tile[pid].add(w.space_id)
+                    continue
                 vname = w.venue.name if w.venue else None
                 if vname == "FROMAGERIE" and w.space_id is not None:
                     w_fromag[w.space_id] = pid
@@ -311,19 +345,30 @@ class BoardDisplay:
                 elif vname == "FESTIVAL" and w.row is not None and w.col is not None:
                     w_festival[(w.row, w.col)] = pid
 
-        self._redraw_fromagerie(fromag, w_fromag, mp_fromag)
-        self._redraw_bistro(bistro, w_bistro, mp_bistro)
-        self._redraw_villes(villes, w_villes, mp_villes)
-        self._redraw_festival(festival, w_festival, mp_festival)
+        # Build per-venue resource worker dicts: space_id → player_id for the
+        # player whose perspective corresponds to each venue quadrant.
+        res: dict[str, dict[int, int]] = {}
+        for venue_idx, venue in enumerate(VENUE_ORDER):
+            facing_pid = (venue_idx - state.rotation_index) % 4
+            res[venue.name] = {
+                sid: facing_pid for sid in resource_on_tile[facing_pid]
+            }
 
-    def _redraw_fromagerie(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int]) -> None:
+        self._redraw_fromagerie(fromag, w_fromag, mp_fromag, res["FROMAGERIE"])
+        self._redraw_bistro(bistro, w_bistro, mp_bistro, res["BISTRO"])
+        self._redraw_villes(villes, w_villes, mp_villes, res["VILLES"])
+        self._redraw_festival(festival, w_festival, mp_festival, res["FESTIVAL"])
+
+    def _redraw_fromagerie(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int], resource_workers: dict[int, int]) -> None:
         c = self._canvases["FROMAGERIE"]
         c.delete("all")
         cheese_col = {"SOFT": 0, "HARD": 1, "BLEU": 2}
+        n_rows = 0
         for space in sorted(self._fromag_spaces.values(),
                              key=lambda s: (s.shelf_id, s.cheese_type.name)):
             row = space.shelf_id - 1
             col = cheese_col.get(space.cheese_type.name, 0)
+            n_rows = max(n_rows, row + 1)
             outline = _AGE_OUTLINE.get(space.age.name, _EMPTY_OUTLINE)
             pid = occupied.get(space.space_id)
             fill = _CHEESE_FILL.get(space.cheese_type.name, _EMPTY_FILL) if pid is not None else _EMPTY_FILL
@@ -332,16 +377,19 @@ class BoardDisplay:
                 self._draw_worker_ring(c, row, col, workers[space.space_id])
             elif space.space_id in mp:
                 self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
+        self._draw_resource_row(c, n_rows, resource_workers)
 
-    def _redraw_bistro(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int]) -> None:
+    def _redraw_bistro(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int], resource_workers: dict[int, int]) -> None:
         c = self._canvases["BISTRO"]
         c.delete("all")
         tables: dict[int, list] = defaultdict(list)
         for space in self._bistro_spaces.values():
             tables[space.table_id].append(space)
+        n_rows = 0
         for table_id in sorted(tables):
             plates = sorted(tables[table_id], key=lambda s: s.plate_age.name)
             row = table_id - 1
+            n_rows = max(n_rows, row + 1)
             for col, space in enumerate(plates):
                 outline = _AGE_OUTLINE.get(space.plate_age.name, _EMPTY_OUTLINE)
                 pid = occupied.get(space.space_id)
@@ -351,13 +399,16 @@ class BoardDisplay:
                     self._draw_worker_ring(c, row, col, workers[space.space_id])
                 elif space.space_id in mp:
                     self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
+        self._draw_resource_row(c, n_rows, resource_workers)
 
-    def _redraw_villes(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int]) -> None:
+    def _redraw_villes(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int], resource_workers: dict[int, int]) -> None:
         c = self._canvases["VILLES"]
         c.delete("all")
+        n_rows = 0
         for idx, space in enumerate(sorted(self._villes_spaces.values(),
                                            key=lambda s: s.space_id)):
             row, col = divmod(idx, 3)
+            n_rows = max(n_rows, row + 1)
             outline = _AGE_OUTLINE.get(space.age.name, _EMPTY_OUTLINE)
             pid = occupied.get(space.space_id)
             fill = _CHEESE_FILL.get(space.cheese_type.name, _EMPTY_FILL) if pid is not None else _EMPTY_FILL
@@ -366,8 +417,9 @@ class BoardDisplay:
                 self._draw_worker_ring(c, row, col, workers[space.space_id])
             elif space.space_id in mp:
                 self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
+        self._draw_resource_row(c, n_rows, resource_workers)
 
-    def _redraw_festival(self, occupied: dict[tuple[int, int], int], workers: dict[tuple[int, int], int], mp: dict[tuple[int, int], int]) -> None:
+    def _redraw_festival(self, occupied: dict[tuple[int, int], int], workers: dict[tuple[int, int], int], mp: dict[tuple[int, int], int], resource_workers: dict[int, int]) -> None:
         c = self._canvases["FESTIVAL"]
         c.delete("all")
         for (row, col), space in self._festival_spaces.items():
@@ -391,6 +443,7 @@ class BoardDisplay:
                     self._draw_worker_ring(c, row - 1, col - 1, workers[(row, col)])
                 elif (row, col) in mp:
                     self._draw_milking_parlour_marker(c, row - 1, col - 1, mp[(row, col)])
+        self._draw_resource_row(c, self._fest_rows, resource_workers)
 
     def _update_sidebar(self, state: "GameState") -> None:
         _res = {"STRUCTURE": "STR", "LIVESTOCK": "LST", "FRUIT": "FRT", "ORDER": "ORD"}
