@@ -173,6 +173,15 @@
     [x] 8.2.2 Implement `BaselineStats.summary_table() -> str`: return a rich-formatted table string showing win rates by board and mean points per scoring category; use the `rich` library's `Table`.
     [x] 8.2.3 Write `tests/test_stats.py`: run 50 RandomAgent games, construct `BaselineStats`, verify win rates sum to approximately 1.0 (within 0.05), verify all mean scores are non-negative.
 
+[x] 8.3 Game Analysis Charts
+  [x] 8.3.1 Extend `ResultsDB` schema to support chart data: add columns to `scores` table — `structures_unlocked TEXT` (JSON array of 4 bools), `fruit_spent_on_fruited INTEGER`, `fruit_spent_on_jam INTEGER`, `milking_parlours_used INTEGER`; add `placed_cheese` table with `game_id INTEGER REFERENCES games`, `player_id INTEGER`, `age TEXT`, `count INTEGER`; add `villes_control` table with `game_id INTEGER REFERENCES games`, `region INTEGER`, `controlling_player INTEGER` (−1 for tie).
+  [x] 8.3.2 Update `ResultsDB.store_result` to populate the new columns and tables; ensure schema migration is safe when opening an existing DB without the new columns (use `ALTER TABLE … ADD COLUMN IF NOT EXISTS`).
+  [x] 8.3.3 Implement `src/analysis/plots.py` with one function per chart (Charts 1–14); each function: `plot_<name>(db: ResultsDB, data: GameDataLoader, out_dir: Path) -> None`; reads from DB; saves a PNG to `out_dir`; skips silently if fewer than 10 rows found. See Milestone 6 in milestones for full per-chart spec.
+  [x] 8.3.4 Charts: 1 structure frequency (4×4 grouped bar), 2 points per venue (bar), 3 win rate per board (bar), 4 fruit vs jam usage (bar), 5 orders share (histogram), 6 unused resources share (histogram), 7 winner vs loser radar (radar chart), 8 board×venue heatmap (4×4), 9 cheese age by outcome (grouped bar), 10 structure unlock winners vs losers (grouped bar per slot), 11 HQ score by board/outcome (bar), 12 parlour usage vs win rate (bar), 13 Villes region control (bar), 14 fruit balance scatter.
+  [x] 8.3.5 Write `output/strategy_summary.md` from `src/analyze.py`: one finding block per chart, schema — `## Finding: <title>`, `source_chart:`, `confidence: high|medium|low`, `key_metric:`, `winner_vs_loser_delta:`, `finding:`, `implication:`.
+  [x] 8.3.6 Update `src/analyze.py`: add `--charts` flag (default True); when set, call all 14 chart functions and write `output/strategy_summary.md`; add `--out` (default `output/`) CLI arg.
+  [x] 8.3.7 Write `tests/test_plots.py`: run each of the 14 chart functions against a DB populated with 50 synthetic `GameResult` objects; verify the PNG file is created and non-empty.
+
 ---
 
 ## Phase 3: AI Training via Q-Learning
@@ -236,14 +245,13 @@
 
 ---
 
-[ ] 13. Training Analysis Plots
-  [ ] 13.1 Learning Curve
-    [ ] 13.1.1 Implement `plot_learning_curve(log_path: Path, out_path: Path)` in `src/analysis/plots.py` using `matplotlib`: read training log (CSV format: `game, win_rate, mean_pp, epsilon`); plot win rate and mean PP on dual y-axes vs. game number; save to `out_path` as PNG.
-    [ ] 13.1.2 Implement `plot_score_distribution(results: list[GameResult], out_path: Path)`: plot histogram of total scores across all games and players; overlay separate histograms for each board_id; save as PNG.
-    [ ] 13.1.3 Implement `plot_score_breakdown(results: list[GameResult], out_path: Path)`: stacked bar chart showing mean contribution of each scoring category (Festival, Villes, Fromagerie, Bistro, Orders, Fruit, HQ, Unused) per board; save as PNG.
-  [ ] 13.2 Strategy Analysis
-    [ ] 13.2.1 Implement `plot_venue_usage(results: list[GameResult], out_path: Path)`: for each venue, compute the mean number of tokens placed there per game per player; display as grouped bar chart by board_id; save as PNG.
-    [ ] 13.2.2 Implement `plot_win_rate_by_board(results: list[GameResult], out_path: Path)`: bar chart of win rate per board_id; save as PNG.
-  [ ] 13.3 Analysis Entry Point
-    [ ] 13.3.1 Implement `src/analyze.py` as a runnable script: load results from `ResultsDB`; generate all plots to `output/plots/`; print a summary statistics table using `rich`; accept `--db` (path to results DB) and `--out` (output directory) CLI args.
-    [ ] 13.3.2 Write `tests/test_plots.py`: run `plot_learning_curve` and `plot_score_distribution` on synthetic data; verify the output PNG files are created and non-empty.
+[ ] 13. Learning Performance Charts
+  [ ] 13.1 Learning Curve Charts (require Q-training output in `output/training_log.jsonl` and `models/checkpoint_*.npz`)
+    [ ] 13.1.1 Implement `plot_epsilon_decay(log_path: Path, config: dict, out_path: Path)` in `src/analysis/plots.py`: line chart of ε vs. game number; dashed line at `epsilon_end` from config; annotate convergence point; read `game`, `epsilon` fields from training log.
+    [ ] 13.1.2 Implement `plot_win_rate_vs_training(log_path: Path, out_path: Path)`: line chart of win rate vs. game number; dashed baseline at 0.25; annotate final win rate; read `game`, `win_rate` fields.
+    [ ] 13.1.3 Implement `plot_mean_score_training(log_path: Path, out_path: Path)`: line chart of mean score ± std dev band vs. game number; annotate peak; read `game`, `mean_score`, `std_score` fields.
+    [ ] 13.1.4 Implement `plot_q_weight_norms(models_dir: Path, out_path: Path)`: line chart of L2 norm of weight vector per checkpoint; reads all `models/checkpoint_*.npz`; computes `np.linalg.norm(weights["w"])` for each.
+  [ ] 13.2 Hyperparameter Signals Export
+    [ ] 13.2.1 Write `output/hyperparameter_signals.csv` from `src/train.py` after training completes: schema `signal, value, unit, threshold, status, recommendation`; signals: `epsilon_final`, `epsilon_floor`, `games_to_epsilon_floor`, `win_rate_final`, `win_rate_peak`, `win_rate_plateau_game`, `score_mean_final`, `score_std_final`, `score_std_trend`, `weight_norm_final`, `weight_norm_delta`; `status` ∈ {`OK`, `WARN`, `CRIT`}.
+  [ ] 13.3 Tests
+    [ ] 13.3.1 Write `tests/test_learning_plots.py`: run each of the 4 learning chart functions on synthetic training log data (write a temp JSONL file); verify PNG files are created and non-empty.

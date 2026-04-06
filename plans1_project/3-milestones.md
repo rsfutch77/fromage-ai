@@ -265,8 +265,64 @@
 
 ---
 
-## Milestone 6: Analysis Plots
-- **Focus**: Add matplotlib charts to `src/analyze.py` (and helpers in `src/analysis/stats.py`) that visualise simulation results stored in the SQLite DB. No new game logic — reads from `ResultsDB` only.
+## Milestone 6: Game Analysis Charts
+- **Focus**: Implement all 14 game-analysis matplotlib charts in `src/analysis/plots.py`, extend `ResultsDB` to store the extra player-state fields the charts need, update `src/analyze.py` to generate charts and write `output/strategy_summary.md`. No Q-learning dependency — all data comes from RandomAgent simulation runs. Learning-performance charts (L1–L4) and `hyperparameter_signals.csv` are deferred to a Phase 5 milestone after Q-training is implemented.
+
+### Plan Review
+- [x] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+  - Charts 1–14 are fully specified with chart type, axes, data sources, and rationale. `strategy_summary.md` finding schema is defined. DB extension fields are enumerated. No ambiguity.
+- [x] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+  - All 14 charts have explicit DB data sources. DB schema extension (req 8.3.1–8.3.2) covers every extra field needed. Learning charts (L1–L4) and `hyperparameter_signals.csv` are explicitly excluded and deferred to Phase 5 (req 13).
+- [x] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+  - Game-analysis charts (no Q-learning dependency) are in this milestone, completing Phase 2. Learning charts are in Phase 5.
+- [x] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+  - `plots.py` ~400 lines (14 chart functions + helpers), `exports.py` ~60 lines, `analyze.py` extension ~60 lines — all within 500-line limit. `test_plots.py` ~150 lines.
+- [x] Define convenient feature flags.
+  - `MIN_GAMES_FOR_CHART = 10` guard in each chart function (skip + log warning if DB has fewer rows); `OUTPUT_DIR = Path("output/plots")` default constant in `analyze.py`.
+
+### Outputs
+- `src/analysis/plots.py` — 14 game-analysis chart functions (Charts 1–14)
+- `src/analysis/exports.py` — `write_strategy_summary(db: ResultsDB, out_path: Path)`
+- `src/analysis/results_db.py` — extended schema and updated `store_result`
+- `src/analyze.py` — updated entry point with `--charts` and `--out` flags
+- `tests/test_plots.py` — chart generation tests (req 8.3.7)
+
+### Coding Tasks
+- [x] Extend `ResultsDB` schema: add `structures_unlocked TEXT`, `fruit_spent_on_fruited INTEGER`, `fruit_spent_on_jam INTEGER`, `milking_parlours_used INTEGER` to `scores`; add `placed_cheese` table (`game_id`, `player_id`, `age TEXT`, `count INTEGER`); add `villes_control` table (`game_id`, `player_id`, `region INTEGER`, `controlling_player INTEGER`); use try/except around ALTER TABLE for safe migration (SQLite lacks ADD COLUMN IF NOT EXISTS pre-3.37)
+- [x] Update `ResultsDB.store_result` to populate new columns and tables from `GameResult`; also fixed longstanding bug where `board_id` was incorrectly stored as `player_id`
+- [x] Create `src/analysis/plots.py`; add `MIN_GAMES_FOR_CHART = 10` constant
+- [x] Chart 1: `plot_structure_frequency(db, out_dir)`
+- [x] Chart 2: `plot_points_per_venue(db, out_dir)`
+- [x] Chart 3: `plot_win_rate_by_board(db, out_dir)`
+- [x] Chart 4: `plot_fruit_usage(db, out_dir)`
+- [x] Chart 5: `plot_orders_share(db, out_dir)`
+- [x] Chart 6: `plot_unused_resources_share(db, out_dir)`
+- [x] Chart 7: `plot_winner_vs_loser_radar(db, out_dir)`
+- [x] Chart 8: `plot_board_venue_heatmap(db, out_dir)`
+- [x] Chart 9: `plot_cheese_age_distribution(db, out_dir)`
+- [x] Chart 10: `plot_structure_unlock_by_outcome(db, out_dir)`
+- [x] Chart 11: `plot_headquarters_by_board(db, out_dir)`
+- [x] Chart 12: `plot_parlour_usage_vs_win_rate(db, out_dir)`
+- [x] Chart 13: `plot_villes_region_control(db, out_dir)`
+- [x] Chart 14: `plot_fruit_balance_scatter(db, out_dir)`
+- [x] Create `src/analysis/exports.py`; implement `write_strategy_summary(db: ResultsDB, out_path: Path)`
+- [x] Update `src/analyze.py`: add `--charts` flag (default `True`) and `--out` arg (default `output/`); when `--charts`, call all 14 plot functions and call `write_strategy_summary`
+- [x] Write `tests/test_plots.py`: populate a temp DB with 50 synthetic results; run each chart function; assert PNG created and `os.path.getsize > 0`
+
+#### Code Review Tasks
+- [x] Review if you made any files that are too long, try to keep them below around 500 lines
+  - `plots.py` 465 lines, `exports.py` 319 lines, `results_db.py` 279 lines, `analyze.py` 110 lines — all within limit.
+- [x] Review for duplicated code and try to consolidate and use imports instead
+  - `_check_min` and `_save` helpers centralise the skip-guard and file-write logic shared by all 14 chart functions. `_VENUES`, `_SCORE_CATS`, `_AGES` constants avoid repetition across plots and exports.
+- [x] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+  - Milestone coding tasks updated above. `store_result` board_id bug fix is internal — no spec change needed. Charts 1 and 10 drop the `data` parameter (not needed — board IDs come from the DB).
+- [x] Check to make sure we have explicit imports and minimal coupling
+  - All imports explicit. `plots.py` and `exports.py` use `TYPE_CHECKING` for `ResultsDB` to avoid circular imports. `matplotlib.use("Agg")` set at module level to prevent display issues in headless environments.
+
+---
+
+## Milestone 7: Learning Performance Charts
+- **Focus**: Implement Charts L1–L4 (epsilon decay, win-rate vs training, mean score, Q-weight norms) and the `hyperparameter_signals.csv` export in `src/analysis/plots.py` and `src/train.py`. Requires completed Q-training output (`output/training_log.jsonl`, `models/checkpoint_*.npz`). Deferred to Phase 5.
 
 ### Plan Review
 - [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
@@ -309,177 +365,20 @@ The charts also optionally read checkpoint files at `models/checkpoint_{game}.np
 - **Data source**: `models/checkpoint_{game}.npz` — `w` key (weight vector).
 - **Why useful**: If the norm is still growing or shifting significantly between checkpoints, the Q-function has not converged. A flat line indicates the weights have stabilised, meaning additional training is unlikely to change the learned strategy — the clearest signal for an early-stopping decision.
 
-### Charts
-
-#### Chart 1 — Structure build frequency by player board
-- **What**: For each of the 4 player boards, show how often each of its 4 structures was unlocked across all simulated games. That is 16 bars total (or a 4×4 grouped bar chart, one group per board).
-- **Data source**: `PlayerState.structures_unlocked` (list of 4 bools) + `PlayerState.board_id`, stored per game in `ResultsDB`.
-- **Why useful**: Reveals which structures are strong enough that the AI reliably unlocks them, and whether certain boards unlock structures more aggressively.
-
-#### Chart 2 — Average points per venue
-- **What**: Bar chart with 4 bars (Fromagerie, Bistro, Villes, Festival) showing the mean score contribution of each venue across all games and all players.
-- **Data source**: `ScoreBreakdown` fields `fromagerie`, `bistro`, `villes`, `festival` returned by `score_game`; stored per player per game in `ResultsDB`.
-- **Why useful**: Immediately shows which venue is the dominant scoring engine so training can be targeted.
-
-#### Chart 3 — Win rate per player board
-- **What**: Bar chart with 4 bars (one per `board_id` 0–3) showing the fraction of games won by a player using that board.
-- **Data source**: `GameResult.winner_id` + `PlayerState.board_id`; needs a join in `ResultsDB` to map winner to their board.
-- **Why useful**: Detects structural board balance issues early — a board with a significantly higher win rate signals a balance problem in the game data or scoring.
-
-#### Chart 4 — Fruit vs jam usage
-- **What**: Stacked or side-by-side bar chart (or pie chart) comparing total `fruit_spent_on_fruited` vs `fruit_spent_on_jam` across all players and games.
-- **Data source**: `PlayerState.fruit_spent_on_fruited` and `PlayerState.fruit_spent_on_jam`, stored per player per game in `ResultsDB`.
-- **Why useful**: Shows whether the AI (and by extension the game economy) skews toward fruited or jam cheese; imbalance might indicate mispriced fruit requirements in the CSV data.
-
-#### Chart 5 — Orders as share of total score
-- **What**: Distribution (histogram or box plot) of `orders / total_score` as a percentage, across all players and games. Annotate with the mean percentage.
-- **Data source**: `ScoreBreakdown.orders` and `ScoreBreakdown.total` (or sum of all breakdown fields) per player per game in `ResultsDB`.
-- **Why useful**: Tells you at a glance whether pursuing orders is a meaningful strategy or a negligible side income. If the mean share is low, the AI can reasonably de-prioritise order collection.
-
-#### Chart 6 — Unused resources as share of total score (penalty context)
-- **What**: Distribution (histogram or box plot) of `unused_resources / total_score` as a percentage, across all players and games. Annotate with the mean percentage.
-- **Data source**: `ScoreBreakdown.unused_resources` and total score per player per game in `ResultsDB`.
-- **Why useful**: Quantifies how much the unused-resource deduction actually hurts in practice. A large mean share signals the AI is hoarding resources and needs stronger incentives to spend them.
-
-#### Chart 7 — Winner vs loser score breakdown (radar/spider chart)
-- **What**: Two overlaid polygons — mean winner scores vs mean loser scores — across all 8 `ScoreBreakdown` categories (festival, villes, fromagerie, bistro, orders, fruit, headquarters, unused_resources). Each axis is normalised to the same scale.
-- **Data source**: `ScoreBreakdown` per player + `GameResult.winner_id`.
-- **Why useful**: The category where the polygons diverge most is where winners actually pull ahead. The single highest-signal chart for identifying which part of the game to prioritise.
-
-#### Chart 8 — Board × venue synergy heatmap
-- **What**: 4×4 heatmap (board_id on one axis, venue on the other) where each cell is the mean score that board earned at that venue. Annotate each cell with the raw value.
-- **Data source**: `ScoreBreakdown` venue fields + `PlayerState.board_id`.
-- **Why useful**: Boards have explicit venue synergies built into their structure slots (Board 2 → Festival livestock, Board 3 → Villes structure, Board 4 → Bistro fruit). This confirms whether those synergies surface as higher scores in practice and by how much.
-
-#### Chart 9 — Cheese age distribution: winners vs losers
-- **What**: Grouped bar chart — Bronze / Silver / Gold token counts, split by winner vs loser (normalised to tokens per player per game so sample sizes are comparable).
-- **Data source**: `PlacedCheese.age` grouped by whether that player won, stored per game in `ResultsDB`.
-- **Why useful**: Gold workers take 3 rotations to return (real tempo cost). This shows whether the slow-but-powerful Gold strategy pays off or whether high-throughput Bronze play dominates.
-
-#### Chart 10 — Structure unlock rate: winners vs losers
-- **What**: For each of the 16 structure slots (4 boards × 4 slots), show unlock rate among winners vs losers on that board. Display as a side-by-side bar per slot.
-- **Data source**: `PlayerState.structures_unlocked` + `PlayerState.board_id` + winner status. Extends Chart 1 by splitting on outcome.
-- **Why useful**: Chart 1 shows overall frequency; this shows which specific structures distinguish winners from losers on the same board — far more actionable for a real player.
-
-#### Chart 11 — Headquarters score by board (winners vs losers)
-- **What**: Bar chart of mean `ScoreBreakdown.headquarters` per board_id, with winner/loser split. Each board's HQ condition is different (Board 1: structures deployed, Board 2: fruit/jam spent, Board 3: orders completed, Board 4: livestock in parlours).
-- **Data source**: `ScoreBreakdown.headquarters` + `PlayerState.board_id` + winner status.
-- **Why useful**: Shows which HQ condition is most achievable in practice and whether the HQ score is large enough to meaningfully swing games (i.e. is it worth spending 5 structure to unlock?).
-
-#### Chart 12 — Milking parlour usage count vs win rate
-- **What**: Bar chart with x-axis = number of parlours used (0–4) and y-axis = win rate at that count.
-- **Data source**: `PlayerState.milking_parlours_used` (count of True values) + winner status.
-- **Why useful**: A monotonically rising curve means more parlour use always helps; a plateau or dip reveals a sweet spot. Also sanity-checks whether the livestock cost is appropriately priced.
-
-#### Chart 13 — Villes region control rate and win correlation
-- **What**: Two side-by-side bars per region (6 regions): (a) fraction of games where a player controlled that region outright (not tied) and (b) win rate of the controlling player.
-- **Data source**: `GameState.villes_customer_token_holders` (region → player_id or None) + winner status. Token values (white/yellow = 9, green/pink = 8, purple/blue = 7) annotated as reference.
-- **Why useful**: Shows whether the high-value regions (white, yellow) are worth actively contesting, or whether players ignore them and win anyway via other venues.
-- **Caveat**: Regional assignments are fixed in the simulation (see `assumptions.md` — customer tokens are not randomised at game start). In a real game the tokens are shuffled, so a region that appears valuable here may simply be valuable because its fixed position is spatially advantageous on the Villes board, not because of its point value. If this chart's results are ambiguous or suspiciously region-dependent, see the stretch goal for customer token randomisation below.
-
-#### Chart 14 — Fruit balance scatter (fruited vs jam, coloured by outcome)
-- **What**: Scatter plot of `(fruit_spent_on_fruited, fruit_spent_on_jam)` per player, with winners in one colour and losers in another. Overlay the line `y = x` (perfect balance).
-- **Data source**: `PlayerState.fruit_spent_on_fruited`, `PlayerState.fruit_spent_on_jam`, winner status.
-- **Why useful**: `score_fruit = fruited_spent × jam_spent` is multiplicative — imbalanced spending is actively punished. If winning points cluster near the diagonal and losing points cluster off-axis, this is direct, non-obvious advice to a player: balance your fruit spending.
-
-### Analysis Exports
-
-Two structured files are written alongside the charts so that a downstream agent can consume results without re-reading PNGs.
-
-#### `output/hyperparameter_signals.csv`
-
-Written by `src/train.py` after learning charts are generated. Each row is one named signal extracted from the training logs and checkpoints. A tuning agent reads this file and recommends `agent_config.json` changes.
-
-Schema: `signal, value, unit, threshold, status, recommendation`
-
-| signal | what it captures |
-|--------|-----------------|
-| `epsilon_final` | ε at the last logged game |
-| `epsilon_floor` | `epsilon_end` from config |
-| `games_to_epsilon_floor` | game number when ε first reached `epsilon_end`, or `null` if not yet reached |
-| `win_rate_final` | win rate vs RandomAgent at last eval |
-| `win_rate_peak` | highest win rate recorded across all evals |
-| `win_rate_plateau_game` | game number at which win rate stopped improving (< 0.5% gain over last 3 evals) |
-| `score_mean_final` | mean score at last eval |
-| `score_std_final` | std dev of score at last eval |
-| `score_std_trend` | slope of std dev over last 5 evals (negative = converging) |
-| `weight_norm_final` | L2 norm of weight vector at last checkpoint |
-| `weight_norm_delta` | change in norm between the last two checkpoints |
-
-`status` is one of `OK`, `WARN`, `CRIT`. `recommendation` is a short machine-readable string, e.g. `increase_epsilon_decay_games`, `reduce_alpha`, `run_more_games`, `ok`.
-
-#### `output/strategy_summary.md`
-
-Written by `src/analyze.py` after game-analysis charts are generated. Contains one structured finding per chart, in a consistent format a summarisation agent can render into prose or a player guide.
-
-Each finding block uses this format:
-
-```
-## Finding: <short title>
-source_chart: <chart number and name>
-confidence: high | medium | low   # high = clear signal, low = noisy data
-key_metric: <value with units>
-winner_vs_loser_delta: <value, if applicable>
-finding: <one sentence, declarative, no hedging>
-implication: <one sentence — what a player or the AI should do differently>
-```
-
-Findings to generate (one per chart that yields a clear signal):
-
-- Chart 1: which structure on each board is most commonly unlocked (mode per board)
-- Chart 2: which venue contributes the most average points (argmax)
-- Chart 3: whether any board's win rate deviates from 0.25 by more than 0.05 (balance flag)
-- Chart 4: whether fruited or jam usage is higher (ratio)
-- Chart 5: mean orders-as-share-of-score (is it worth pursuing?)
-- Chart 6: mean unused-resource penalty magnitude
-- Chart 7: which scoring category shows the largest winner/loser divergence (argmax of delta)
-- Chart 8: highest and lowest board×venue mean score cells (best and worst synergy)
-- Chart 9: whether Gold cheese age placement correlates with winning (winner mean Gold count vs loser)
-- Chart 10: which structure slot most differentiates winners from losers on each board
-- Chart 11: which board achieves the highest mean HQ score, and whether winners achieve significantly more
-- Chart 12: parlour usage count at peak win rate (optimal parlour target)
-- Chart 13: highest win-rate Villes region (best region to contest)
-- Chart 14: whether winner fruit spending clusters near the `y = x` diagonal more than losers
-
 ### Outputs
-- `src/analysis/stats.py` — add 14 plot-producing methods to `BaselineStats` (or a new `PlotStats` class if `stats.py` is too large)
-- `src/analysis/plots.py` — 4 learning-performance chart functions (L1–L4); reads `output/training_log.jsonl` and `models/checkpoint_*.npz`
-- `src/analysis/exports.py` — `write_hyperparameter_signals(log_path, models_dir, config_path, out_path)` and `write_strategy_summary(db, out_path)`
-- `src/analyze.py` — add `--plots` CLI flag; when set, generate and save all 14 charts and `strategy_summary.md` to `output/`
-- `src/train.py` — add `--learning-plots` CLI flag; when set, generate 4 learning charts and `hyperparameter_signals.csv` to `output/`
+- `src/analysis/plots.py` — 4 learning-performance chart functions (L1–L4)
+- `src/analysis/exports.py` — `write_hyperparameter_signals(log_path, models_dir, config_path, out_path)`
+- `src/train.py` — add `--learning-plots` flag; generate charts and write `output/hyperparameter_signals.csv`
+- `tests/test_learning_plots.py` — learning chart tests (req 13.3.1)
 
 ### Coding Tasks
-- [ ] Ensure `ResultsDB` stores per-player `structures_unlocked`, `board_id`, all `ScoreBreakdown` fields, `fruit_spent_on_fruited`, `fruit_spent_on_jam`, `milking_parlours_used`, per-player `PlacedCheese` age counts, `villes_customer_token_holders`, and `winner_id` per game (add columns to schema if Milestone 5 did not already include them)
-- [ ] Implement `plot_structure_frequency(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_venue_points(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_board_win_rate(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_fruit_vs_jam(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_orders_score_share(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_unused_resources_score_share(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_winner_vs_loser_radar(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_board_venue_heatmap(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_cheese_age_winner_loser(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_structure_unlock_winner_loser(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_headquarters_score_by_board(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_parlour_usage_win_rate(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_villes_region_control(db: ResultsDB, out_path: Path) -> None`
-- [ ] Implement `plot_fruit_balance_scatter(db: ResultsDB, out_path: Path) -> None`
-- [ ] Wire all fourteen under `--plots` flag in `src/analyze.py`; save to `output/<chart_name>.png`
-- [ ] Implement `plot_epsilon_decay(log_path: Path, config_path: Path, out_path: Path) -> None` — Chart L1
-- [ ] Implement `plot_win_rate_progress(log_path: Path, out_path: Path) -> None` — Chart L2
-- [ ] Implement `plot_score_progress(log_path: Path, out_path: Path) -> None` — Chart L3
-- [ ] Implement `plot_weight_magnitude(models_dir: Path, out_path: Path) -> None` — Chart L4
-- [ ] Wire the four learning charts under `--learning-plots` flag in `src/train.py`; save to `output/learning_<chart_name>.png`
-- [ ] Implement `write_hyperparameter_signals(log_path: Path, models_dir: Path, config_path: Path, out_path: Path) -> None` in `src/analysis/exports.py`: compute all 11 signals from the training log and checkpoints; write `output/hyperparameter_signals.csv`; set `status` and `recommendation` per the thresholds below:
-  - `epsilon_final > epsilon_floor + 0.01` → WARN, `run_more_games`
-  - `win_rate_final < 0.30` → CRIT, `extend_training_or_revise_rewards`
-  - `win_rate_final >= 0.30 and win_rate_final < 0.40` → WARN, `consider_more_games`
-  - `score_std_trend > 0` (std dev rising) → WARN, `reduce_alpha`
-  - `weight_norm_delta / weight_norm_final > 0.01` (still shifting > 1% per checkpoint) → WARN, `run_more_games`
-  - all else → OK
-- [ ] Implement `write_strategy_summary(db: ResultsDB, out_path: Path) -> None` in `src/analysis/exports.py`: compute one finding block per chart (14 total) using the schema above; write `output/strategy_summary.md`
-- [ ] Wire `write_hyperparameter_signals` into `--learning-plots` path in `src/train.py`
-- [ ] Wire `write_strategy_summary` into `--plots` path in `src/analyze.py`
+- [ ] L1: `plot_epsilon_decay(log_path: Path, config: dict, out_path: Path)` — line chart of ε vs game number; dashed line at `epsilon_end`; annotate convergence point
+- [ ] L2: `plot_win_rate_vs_training(log_path: Path, out_path: Path)` — line chart of win rate vs game number; dashed baseline at 0.25; annotate final win rate
+- [ ] L3: `plot_mean_score_training(log_path: Path, out_path: Path)` — line chart of mean score ± std dev band vs game number; annotate peak
+- [ ] L4: `plot_q_weight_norms(models_dir: Path, out_path: Path)` — line chart of L2 norm per checkpoint; reads all `models/checkpoint_*.npz`; computes `np.linalg.norm(weights["w"])`
+- [ ] `write_hyperparameter_signals(log_path, models_dir, config_path, out_path)` in `src/analysis/exports.py`: compute 11 signals (req 13.2.1); set `status`/`recommendation` per thresholds; write CSV
+- [ ] Add `--learning-plots` flag to `src/train.py`; when set, call L1–L4 and `write_hyperparameter_signals`
+- [ ] Write `tests/test_learning_plots.py`: write a synthetic training log JSONL + dummy checkpoint files; run all 4 chart functions; assert PNGs created and non-empty
 
 #### Code Review Tasks
 - [ ] Review if you made any files that are too long, try to keep them below around 500 lines
