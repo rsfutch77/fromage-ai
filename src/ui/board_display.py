@@ -303,15 +303,15 @@ class BoardDisplay:
     # ── internal update helpers ────────────────────────────────────────────
 
     def _update_quad_labels(self, state: "GameState") -> None:
-        from src.game.types import VENUE_ORDER, RESOURCE_ORDER
+        from src.game.types import VENUE_ORDER
         for venue_idx, venue in enumerate(VENUE_ORDER):
-            # Resource type is fixed to the venue (rotates with the board).
-            resource = RESOURCE_ORDER[(venue_idx + state.resource_tile_orientation) % 4]
+            # which player currently faces this venue?
+            player_id = (venue_idx - state.rotation_index) % 4
+            # resource for this venue = what the facing player sees on the resource tile
+            resource = state.resource_facing(player_id)
             self._quad_frames[venue.name].config(
                 text=f"{venue.name}  —  {resource.name.capitalize()}"
             )
-            # which player currently faces this venue?
-            player_id = (venue_idx - state.rotation_index) % 4
             colour = _PLAYER_COLOURS[player_id]
             self._quad_labels[venue.name].config(
                 text=f"← Player {player_id}", fg=colour,

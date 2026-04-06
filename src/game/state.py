@@ -112,10 +112,10 @@ class GameState:
     def resource_facing(self, player_id: int) -> ResourceType:
         """Which resource type the Resource Tile shows to *player_id*.
 
-        The resource tile rotates with the board (counter-clockwise relative
-        to players), so rotation_index is subtracted.
+        The resource tile is fixed to the board and rotates with it, so
+        rotation_index is added (same direction as venue_facing).
         """
-        return RESOURCE_ORDER[(player_id + self.resource_tile_orientation - self.rotation_index) % 4]
+        return RESOURCE_ORDER[(player_id + self.resource_tile_orientation + self.rotation_index) % 4]
 
     # ------------------------------------------------------------------
     # Serialisation
