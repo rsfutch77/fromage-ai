@@ -178,7 +178,13 @@ def _apply_fromagerie_shelf_bonus(
         _gain_resource_inplace(state, player_id, ResourceType.STRUCTURE, 1, data, ctx)
         _gain_resource_inplace(state, player_id, ResourceType.LIVESTOCK, 1, data, ctx)
     elif bonus == "trade_resource_for_any":
-        pass  # Requires player choice; skipped in simulation (no net gain)
+        # TODO (stretch goal): implement the swap properly.
+        # Requires a player choice (which resource to give up, which to receive).
+        # MakeCheeseAction would need a resource_to_give/resource_to_receive field,
+        # legal_make_cheese_actions would need to emit variants per valid give/take pair,
+        # and the action encoder would need to include those fields as explicit features.
+        # For now: skipped with no net resource change.
+        pass
     else:
         logger.warning("Unknown Fromagerie shelf bonus '%s' — ignored", bonus)
 
