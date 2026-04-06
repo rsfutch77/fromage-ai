@@ -146,20 +146,19 @@ class TestLegalGatherActions:
                 assert a.resource_space != AgeType.SILVER
 
     def test_barn_excluded_when_not_unlocked(self, fresh_state, data):
-        """use_barn=True actions are absent when Barn is not unlocked."""
-        actions = legal_gather_actions(fresh_state, 0, data)
+        """use_barn=True turn actions are absent when Barn is not unlocked."""
+        actions = all_legal_turn_actions(fresh_state, 0, data)
         for a in actions:
-            if a is not None:
-                assert not a.use_barn
+            assert not a.use_barn
 
     def test_barn_included_when_unlocked(self, fresh_state, data):
-        """use_barn=True actions appear when slot 1 (Barn) is unlocked."""
+        """use_barn=True turn actions appear when slot 1 (Barn) is unlocked."""
         import copy
         state = copy.deepcopy(fresh_state)
         state.players[0].structures_unlocked[0] = True  # unlock slot 1 (Barn)
 
-        actions = legal_gather_actions(state, 0, data)
-        barn_actions = [a for a in actions if a is not None and a.use_barn]
+        actions = all_legal_turn_actions(state, 0, data)
+        barn_actions = [a for a in actions if a.use_barn]
         assert len(barn_actions) > 0
 
 

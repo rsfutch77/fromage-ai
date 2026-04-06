@@ -50,11 +50,9 @@ class GatherAction:
 
     resource_space: Bronze, Silver, or Gold — the age tier of the space.
         Bronze = 1 resource / 1 rotation away; Silver = 2; Gold = 3.
-    use_barn: if True, also place a worker on the Barn (requires Barn unlocked).
     Worker type (Soft/Hard/Bleu) does not matter when gathering.
     """
     resource_space: AgeType
-    use_barn: bool = False
 
 
 @dataclass
@@ -107,8 +105,11 @@ class TurnAction:
 
     Any field may be None/empty to skip that sub-action.
     make_cheese may contain at most one MakeCheeseAction per turn (one cheese placement per turn).
+    use_barn: True to place a worker on the Barn and gain its resource (requires Barn unlocked,
+              worker in hand). Independent of gather — both can happen in the same turn.
     """
     gather: GatherAction | None = None
+    use_barn: bool = False
     make_cheese: list[MakeCheeseAction] = field(default_factory=list)
     milking_parlours: list[MilkingParlourAction] = field(default_factory=list)
     unlock_structures: list[UnlockStructureAction] = field(default_factory=list)
@@ -285,13 +286,14 @@ def _is_affordable(
     player_id: int,
     data: GameDataLoader,
     gather: GatherAction | None,
+    use_barn: bool,
     make_cheese: list[MakeCheeseAction],
     parlour_actions: list[MilkingParlourAction],
     unlock_actions: list[UnlockStructureAction],
 ) -> bool:
     """Check whether the combination of sub-actions is collectively affordable.
 
-    Accounts for gather income arriving before spending (same turn).
+    Accounts for gather and barn income arriving before spending (same turn).
     """
     player = state.players[player_id]
     avail = dict(player.resources)
@@ -301,8 +303,17 @@ def _is_affordable(
         rtype = state.resource_facing(player_id)
         avail[rtype] = avail.get(rtype, 0) + gather.resource_space.turns
 
-    # Unlock structure costs (Structure tokens)
+    # Apply barn gain (1 of the board's barn resource)
     board_struct = next(b for b in data.player_board_structures if b.board_id == player.board_id)
+    if use_barn:
+        avail[board_struct.barn_resource] = avail.get(board_struct.barn_resource, 0) + 1
+
+    # Cheese token budget: make_cheese + milking parlours must not exceed tokens remaining
+    tokens_avail = player.cheese_tokens_remaining - len(make_cheese) - len(parlour_actions)
+    if tokens_avail < 0:
+        return False
+
+    # Unlock structure costs (Structure tokens)
     for ua in unlock_actions:
         avail[ResourceType.STRUCTURE] -= board_struct.structure_costs[ua.slot - 1]
         if avail[ResourceType.STRUCTURE] < 0:
@@ -347,11 +358,10 @@ def legal_gather_actions(
     """Return all legal gather choices for *player_id* this turn.
 
     Includes None (skip gather).
-    Includes use_barn=True variants only if the Barn structure is unlocked.
     A resource space is legal if this player has no worker currently occupying it.
+    Barn usage is handled separately in TurnAction.use_barn.
     """
     player = state.players[player_id]
-    barn_unlocked = player.structures_unlocked[_BARN_IDX]
 
     workers_in_hand = [w for w in player.workers if w.location == WorkerLocation.IN_HAND]
     n_in_hand = len(workers_in_hand)
@@ -370,10 +380,7 @@ def legal_gather_actions(
     for space in AgeType:
         if space.turns in occupied_spaces:
             continue
-        actions.append(GatherAction(resource_space=space, use_barn=False))
-        # Barn requires a second worker in hand (one for resource tile, one for barn).
-        if barn_unlocked and n_in_hand >= 2:
-            actions.append(GatherAction(resource_space=space, use_barn=True))
+        actions.append(GatherAction(resource_space=space))
 
     return actions
 
@@ -523,14 +530,16 @@ def legal_unlock_actions(
 def _workers_available_after_gather(
     player: PlayerState,
     gather: GatherAction | None,
+    use_barn: bool = False,
 ) -> set[CheeseType]:
-    """Return CheeseTypes still in hand after gather (and optional barn) worker deployment."""
+    """Return CheeseTypes still in hand after gather and optional barn worker deployment."""
     in_hand = [w for w in player.workers if w.location == WorkerLocation.IN_HAND]
     consumed: list[CheeseType] = []
     if gather is not None and in_hand:
         consumed.append(in_hand[0].cheese_type)
-        if gather.use_barn and len(in_hand) > 1:
-            consumed.append(in_hand[1].cheese_type)
+    # Barn uses next available in-hand worker (after gather worker if both are used).
+    if use_barn and len(in_hand) > len(consumed):
+        consumed.append(in_hand[len(consumed)].cheese_type)
     return {w.cheese_type for w in in_hand} - set(consumed)
 
 
@@ -598,36 +607,44 @@ def all_legal_turn_actions(
     unlock_seqs = legal_unlock_actions(state, player_id, data)
 
     player = state.players[player_id]
+    barn_unlocked = player.structures_unlocked[_BARN_IDX]
+    n_in_hand = sum(1 for w in player.workers if w.location == WorkerLocation.IN_HAND)
     results: list[TurnAction] = []
 
     for gc in gather_choices:
-        # Workers consumed by gather (first in-hand) and barn (second in-hand).
-        # Remaining types may each place one worker on a cheese space.
-        available_for_cheese: set[CheeseType] = _workers_available_after_gather(player, gc)
+        # Workers remaining after gather; barn needs one of these.
+        workers_after_gather = n_in_hand - (1 if gc is not None else 0)
+        barn_choices = [False]
+        if barn_unlocked and workers_after_gather >= 1:
+            barn_choices.append(True)
 
-        extra_fruit = (gc.resource_space.turns if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
-        all_cheese = legal_make_cheese_actions(state, player_id, data, extra_fruit)
-        cheese_combos = _legal_cheese_combos(
-            available_for_cheese, all_cheese, min(1, player.cheese_tokens_remaining)
-        )
+        for use_barn in barn_choices:
+            available_for_cheese: set[CheeseType] = _workers_available_after_gather(player, gc, use_barn)
 
-        for combo in cheese_combos:
-            for pc in parlour_combos:
-                for uc in unlock_seqs:
-                    if not _is_affordable(state, player_id, data, gc, combo, pc, uc):
-                        continue
-                    results.append(TurnAction(
-                        gather=gc,
-                        make_cheese=list(combo),
-                        milking_parlours=list(pc),
-                        unlock_structures=list(uc),
-                    ))
-                    if len(results) >= MAX_ACTIONS_PER_TURN:
-                        logger.debug(
-                            "all_legal_turn_actions: hit cap %d for player %d",
-                            MAX_ACTIONS_PER_TURN, player_id,
-                        )
-                        return results
+            extra_fruit = (gc.resource_space.turns if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
+            all_cheese = legal_make_cheese_actions(state, player_id, data, extra_fruit)
+            cheese_combos = _legal_cheese_combos(
+                available_for_cheese, all_cheese, min(1, player.cheese_tokens_remaining)
+            )
+
+            for combo in cheese_combos:
+                for pc in parlour_combos:
+                    for uc in unlock_seqs:
+                        if not _is_affordable(state, player_id, data, gc, use_barn, combo, pc, uc):
+                            continue
+                        results.append(TurnAction(
+                            gather=gc,
+                            use_barn=use_barn,
+                            make_cheese=list(combo),
+                            milking_parlours=list(pc),
+                            unlock_structures=list(uc),
+                        ))
+                        if len(results) >= MAX_ACTIONS_PER_TURN:
+                            logger.debug(
+                                "all_legal_turn_actions: hit cap %d for player %d",
+                                MAX_ACTIONS_PER_TURN, player_id,
+                            )
+                            return results
 
     return results
 

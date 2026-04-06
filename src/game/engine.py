@@ -196,12 +196,9 @@ def _apply_gather_inplace(
     data: GameDataLoader,
     ctx: _TurnCtx,
 ) -> None:
-    """Mutate *state*: place a worker on the resource tile, gain resources, optionally use Barn."""
-    from src.game.types import WorkerLocation  # local to avoid circular at module level
-
+    """Mutate *state*: place a worker on the resource tile and gain resources."""
     player = state.players[player_id]
 
-    # Find the first IN_HAND worker to place on the resource tile
     gather_worker = next(
         (w for w in player.workers if w.location == WorkerLocation.IN_HAND), None
     )
@@ -213,22 +210,38 @@ def _apply_gather_inplace(
     gather_worker.space_id = action.resource_space.turns  # 1/2/3 for Bronze/Silver/Gold
     gather_worker.return_after_rotation = (state.rotation_index + action.resource_space.turns) % 4
 
-    # Gain the resource facing this player
     resource = state.resource_facing(player_id)
     _gain_resource_inplace(state, player_id, resource, action.resource_space.turns, data, ctx)
 
-    # Barn: place a second worker and gain 1 of the board's barn resource
-    if action.use_barn and player.structures_unlocked[_BARN_IDX]:
-        barn_worker = next(
-            (w for w in player.workers if w.location == WorkerLocation.IN_HAND), None
-        )
-        if barn_worker is not None:
-            barn_worker.location = WorkerLocation.ON_BARN
-            barn_worker.venue = None
-            barn_worker.space_id = None
-            barn_worker.return_after_rotation = (state.rotation_index + 1) % 4
-            board_struct = _get_board_struct(data, player.board_id)
-            _gain_resource_inplace(state, player_id, board_struct.barn_resource, 1, data, ctx)
+
+def _apply_barn_inplace(
+    state: GameState,
+    player_id: int,
+    data: GameDataLoader,
+    ctx: _TurnCtx,
+) -> None:
+    """Mutate *state*: place a worker on the Barn and gain 1 of the board's barn resource.
+
+    The barn is a player-board worker space, independent of the resource tile gather.
+    The worker returns after 1 rotation (same as Bronze tier).
+    """
+    player = state.players[player_id]
+    if not player.structures_unlocked[_BARN_IDX]:
+        raise IllegalActionError(f"Player {player_id} does not have the Barn unlocked")
+
+    barn_worker = next(
+        (w for w in player.workers if w.location == WorkerLocation.IN_HAND), None
+    )
+    if barn_worker is None:
+        raise IllegalActionError(f"Player {player_id} has no worker in hand for the Barn")
+
+    barn_worker.location = WorkerLocation.ON_BARN
+    barn_worker.venue = None
+    barn_worker.space_id = None
+    barn_worker.return_after_rotation = (state.rotation_index + 1) % 4
+
+    board_struct = _get_board_struct(data, player.board_id)
+    _gain_resource_inplace(state, player_id, board_struct.barn_resource, 1, data, ctx)
 
 
 def _build_placed_cheese(
@@ -552,6 +565,9 @@ def apply_turn(
 
     if action.gather is not None:
         _apply_gather_inplace(new, player_id, action.gather, data, ctx)
+
+    if action.use_barn:
+        _apply_barn_inplace(new, player_id, data, ctx)
 
     for ua in action.unlock_structures:
         _apply_unlock_structure_inplace(new, player_id, ua, data)

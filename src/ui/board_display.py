@@ -679,10 +679,13 @@ class BoardDisplay:
                 f"→chz:{player.fruit_spent_on_fruited}  "
                 f"→jam:{player.fruit_spent_on_jam}"
             )
-            workers_str = " ".join(
-                f"{'●' if w.location.name == 'IN_HAND' else '○'}{w.cheese_type.name[0]}"
-                for w in player.workers
-            )
+            def _wstr(w) -> str:
+                if w.location.name == "IN_HAND":
+                    return f"\u25cf{w.cheese_type.name[0]}"   # ● filled = in hand
+                if w.location.name == "ON_BARN":
+                    return f"\u25b2{w.cheese_type.name[0]}"   # ▲ triangle = on barn
+                return f"\u25cb{w.cheese_type.name[0]}"       # ○ hollow = deployed
+            workers_str = " ".join(_wstr(w) for w in player.workers)
             parlours = self._parlours.get(player.board_id, [])
             parlour_parts = []
             for p in parlours:
@@ -692,8 +695,17 @@ class BoardDisplay:
             parlour_str = "  ".join(parlour_parts)
             _slot_names = ["Barn", "Dock", "Grnhs", "HQ"]
             costs = self._structure_costs.get(player.board_id, [1, 2, 3, 4])
+            barn_occupied = any(w.location.name == "ON_BARN" for w in player.workers)
+            def _slot_str(i: int, unlocked: bool) -> str:
+                name = _slot_names[i]
+                cost = costs[i]
+                if not unlocked:
+                    return f"({name}:{cost}STR)"
+                if i == 0 and barn_occupied:
+                    return f"[\u25b2{name}:{cost}STR]"  # ▲ = worker on barn
+                return f"[{name}:{cost}STR]"
             unlocked_str = " ".join(
-                f"[{_slot_names[i]}:{costs[i]}STR]" if unlocked else f"({_slot_names[i]}:{costs[i]}STR)"
+                _slot_str(i, unlocked)
                 for i, unlocked in enumerate(player.structures_unlocked)
             )
             hand_str = " ".join(self._fmt_order(o) for o in player.order_cards_held) or "—"
