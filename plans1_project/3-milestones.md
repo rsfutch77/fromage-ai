@@ -247,21 +247,21 @@
 - `tests/test_stats.py` — stats tests (req 8.2.3)
 
 ### Coding Tasks
-- [ ] 7.1.1 `RandomAgent` (already implemented in Milestone 3 — verify and check off)
-- [ ] 7.2.1 `run_batch(n_games, agents, data, base_seed) -> list[GameResult]` in `src/analysis/runner.py`
-- [ ] 7.2.2 Log progress every 100 games at INFO level
-- [ ] 7.2.3 Write `tests/test_runner.py`
-- [ ] 8.1.1-8.1.5 `ResultsDB` class in `src/analysis/results_db.py` (schema + store + fetch)
-- [ ] 8.2.1 `BaselineStats` class in `src/analysis/stats.py`
-- [ ] 8.2.2 `BaselineStats.summary_table() -> str` (rich Table)
-- [ ] 8.2.3 Write `tests/test_stats.py`
-- [ ] Minimal `src/analyze.py`: CLI args `--games`, `--db`, `--seed`; runs batch of RandomAgents, stores in DB, prints summary table
+- [x] 7.1.1 `RandomAgent` (already implemented in Milestone 3 — verify and check off)
+- [x] 7.2.1 `run_batch(n_games, agents, data, base_seed) -> list[GameResult]` in `src/analysis/runner.py`
+- [x] 7.2.2 Log progress every 100 games at INFO level
+- [x] 7.2.3 Write `tests/test_runner.py`
+- [x] 8.1.1-8.1.5 `ResultsDB` class in `src/analysis/results_db.py` (schema + store + fetch)
+- [x] 8.2.1 `BaselineStats` class in `src/analysis/stats.py`
+- [x] 8.2.2 `BaselineStats.summary_table() -> str` (rich Table)
+- [x] 8.2.3 Write `tests/test_stats.py`
+- [x] Minimal `src/analyze.py`: CLI args `--games`, `--db`, `--seed`; runs batch of RandomAgents, stores in DB, prints summary table
 
 #### Code Review Tasks
-- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
-- [ ] Review for duplicated code and try to consolidate and use imports instead
-- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
-- [ ] Check to make sure we have explicit imports and minimal coupling
+- [x] Review if you made any files that are too long, try to keep them below around 500 lines
+- [x] Review for duplicated code and try to consolidate and use imports instead
+- [x] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [x] Check to make sure we have explicit imports and minimal coupling
 
 ---
 

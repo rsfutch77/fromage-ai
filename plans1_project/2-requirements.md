@@ -150,28 +150,28 @@
 
 ---
 
-[ ] 7. Random Agent
-  [ ] 7.1 Implementation
-    [ ] 7.1.1 Implement `RandomAgent` class in `src/ai/random_agent.py` subclassing `Agent`; `choose_action` calls `all_legal_turn_actions(state, player_id)` and returns a uniformly random choice using `random.choice`; accepts optional `seed` in constructor for reproducibility.
-    [ ] 7.1.2 `RandomAgent` must never raise an error even if `all_legal_turn_actions` returns only one option (the skip-everything turn); the skip turn is always legal and must always be in the list.
-  [ ] 7.2 Batch Runner
-    [ ] 7.2.1 Implement `run_batch(n_games: int, agents: list[Agent], data: GameDataLoader, base_seed: int | None = None) -> list[GameResult]` in `src/analysis/runner.py`: run `n_games` sequential games; if `base_seed` is provided, use `base_seed + i` as the seed for game `i`; return all results.
-    [ ] 7.2.2 Log progress via Python `logging` at INFO level every 100 games (e.g. "Completed 100/1000 games").
-    [ ] 7.2.3 Write `tests/test_runner.py`: verify `run_batch(10, ...)` returns exactly 10 `GameResult` objects; verify all 4 player scores are non-negative integers.
+[x] 7. Random Agent
+  [x] 7.1 Implementation
+    [x] 7.1.1 Implement `RandomAgent` class in `src/ai/random_agent.py` subclassing `Agent`; `choose_action` calls `all_legal_turn_actions(state, player_id)` and returns a uniformly random choice using `random.choice`; accepts optional `seed` in constructor for reproducibility.
+    [x] 7.1.2 `RandomAgent` must never raise an error even if `all_legal_turn_actions` returns only one option (the skip-everything turn); the skip turn is always legal and must always be in the list.
+  [x] 7.2 Batch Runner
+    [x] 7.2.1 Implement `run_batch(n_games: int, agents: list[Agent], data: GameDataLoader, base_seed: int | None = None) -> list[GameResult]` in `src/analysis/runner.py`: run `n_games` sequential games; if `base_seed` is provided, use `base_seed + i` as the seed for game `i`; return all results.
+    [x] 7.2.2 Log progress via Python `logging` at INFO level every 100 games (e.g. "Completed 100/1000 games").
+    [x] 7.2.3 Write `tests/test_runner.py`: verify `run_batch(10, ...)` returns exactly 10 `GameResult` objects; verify all 4 player scores are non-negative integers.
 
 ---
 
-[ ] 8. Results Storage & Baseline Statistics
-  [ ] 8.1 SQLite Storage
-    [ ] 8.1.1 Implement `ResultsDB` class in `src/analysis/results_db.py`; constructor takes `db_path: Path` (default `"data/results.db"`); creates schema on first connect.
-    [ ] 8.1.2 Schema — `games` table: `game_id INTEGER PRIMARY KEY AUTOINCREMENT`, `seed INTEGER`, `total_turns INTEGER`, `timestamp TEXT`, `agent_config TEXT` (JSON string describing agent types used).
-    [ ] 8.1.3 Schema — `scores` table: `score_id INTEGER PRIMARY KEY AUTOINCREMENT`, `game_id INTEGER REFERENCES games`, `player_id INTEGER`, `board_id INTEGER`, `festival INTEGER`, `villes INTEGER`, `fromagerie INTEGER`, `bistro INTEGER`, `orders INTEGER`, `fruit INTEGER`, `headquarters INTEGER`, `unused_resources INTEGER`, `total INTEGER`, `is_winner INTEGER` (0 or 1).
-    [ ] 8.1.4 Implement `ResultsDB.store_result(result: GameResult, agent_config: str)`: insert one row into `games` and 4 rows into `scores` in a single transaction.
-    [ ] 8.1.5 Implement `ResultsDB.fetch_scores(agent_config: str | None = None) -> list[dict]`: return all rows from `scores` joined with `games`; optionally filter by `agent_config`.
-  [ ] 8.2 Baseline Statistics
-    [ ] 8.2.1 Implement `BaselineStats` class in `src/analysis/stats.py`; constructor takes `list[GameResult]`; computes and exposes: `win_rate_by_board: dict[int, float]` (board_id → fraction of games won), `mean_score_by_category: dict[str, float]` (category name → mean points across all games/players), `score_std: float`, `mean_turns: float`, `score_percentiles: dict[int, float]` (10/25/50/75/90th percentiles of total scores).
-    [ ] 8.2.2 Implement `BaselineStats.summary_table() -> str`: return a rich-formatted table string showing win rates by board and mean points per scoring category; use the `rich` library's `Table`.
-    [ ] 8.2.3 Write `tests/test_stats.py`: run 50 RandomAgent games, construct `BaselineStats`, verify win rates sum to approximately 1.0 (within 0.05), verify all mean scores are non-negative.
+[x] 8. Results Storage & Baseline Statistics
+  [x] 8.1 SQLite Storage
+    [x] 8.1.1 Implement `ResultsDB` class in `src/analysis/results_db.py`; constructor takes `db_path: Path` (default `"data/results.db"`); creates schema on first connect.
+    [x] 8.1.2 Schema — `games` table: `game_id INTEGER PRIMARY KEY AUTOINCREMENT`, `seed INTEGER`, `total_turns INTEGER`, `timestamp TEXT`, `agent_config TEXT` (JSON string describing agent types used).
+    [x] 8.1.3 Schema — `scores` table: `score_id INTEGER PRIMARY KEY AUTOINCREMENT`, `game_id INTEGER REFERENCES games`, `player_id INTEGER`, `board_id INTEGER`, `festival INTEGER`, `villes INTEGER`, `fromagerie INTEGER`, `bistro INTEGER`, `orders INTEGER`, `fruit INTEGER`, `headquarters INTEGER`, `unused_resources INTEGER`, `total INTEGER`, `is_winner INTEGER` (0 or 1).
+    [x] 8.1.4 Implement `ResultsDB.store_result(result: GameResult, agent_config: str)`: insert one row into `games` and 4 rows into `scores` in a single transaction.
+    [x] 8.1.5 Implement `ResultsDB.fetch_scores(agent_config: str | None = None) -> list[dict]`: return all rows from `scores` joined with `games`; optionally filter by `agent_config`.
+  [x] 8.2 Baseline Statistics
+    [x] 8.2.1 Implement `BaselineStats` class in `src/analysis/stats.py`; constructor takes `list[GameResult]`; computes and exposes: `win_rate_by_board: dict[int, float]` (board_id → fraction of games won), `mean_score_by_category: dict[str, float]` (category name → mean points across all games/players), `score_std: float`, `mean_turns: float`, `score_percentiles: dict[int, float]` (10/25/50/75/90th percentiles of total scores).
+    [x] 8.2.2 Implement `BaselineStats.summary_table() -> str`: return a rich-formatted table string showing win rates by board and mean points per scoring category; use the `rich` library's `Table`.
+    [x] 8.2.3 Write `tests/test_stats.py`: run 50 RandomAgent games, construct `BaselineStats`, verify win rates sum to approximately 1.0 (within 0.05), verify all mean scores are non-negative.
 
 ---
 
