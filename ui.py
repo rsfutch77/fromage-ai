@@ -78,7 +78,9 @@ def main() -> None:
             wids   = winner(scores)
             wstr   = ", ".join(f"P{w}" for w in wids)
             status_var.set(f"Game over — Turn {state.turn_number} — Winner(s): {wstr}")
+            display.update_scores(scores)
         else:
+            display.clear_scores()
             phase = current_phase()
             phase_str = "Workers placed" if phase == _PHASE_ROTATE else "Pre-placement"
             pos   = f"{view_idx + 1}/{len(history)}"
@@ -147,7 +149,7 @@ def main() -> None:
 
     # ── control bar ────────────────────────────────────────────────────────
     ctrl = tk.Frame(display.root, bg="#ECEFF1", pady=4)
-    ctrl.grid(row=2, column=0, columnspan=2, sticky="ew", padx=8, pady=(0, 6))
+    ctrl.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 6))
 
     btn_prev = tk.Button(ctrl, text="◀ Back",   width=10, command=do_prev)
     btn_prev.pack(side="left", padx=4)

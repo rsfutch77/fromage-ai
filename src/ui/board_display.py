@@ -30,6 +30,18 @@ if TYPE_CHECKING:
 _CELL = 28          # px per cheese-space cell
 _PAD  = 4           # px padding between cells
 
+# Score-breakdown table rows: (ScoreBreakdown field name, display label)
+_SCORE_ROW_DEFS: list[tuple[str, str]] = [
+    ("festival",         "Festival"),
+    ("villes",           "Customer"),
+    ("fromagerie",       "Fromager"),
+    ("bistro",           "Bistro"),
+    ("orders",           "Orders"),
+    ("fruit",            "Fruit"),
+    ("headquarters",     "HQ"),
+    ("unused_resources", "Unused"),
+]
+
 # Cheese type → fill colour
 _CHEESE_FILL: dict[str, str] = {
     "SOFT": "#FFF9C4",   # cream
@@ -69,6 +81,7 @@ class BoardDisplay:
         self._bistro_spaces  = {s.space_id: s for s in data.bistro_spaces}
         self._villes_spaces  = {s.space_id: s for s in data.villes_spaces}
         self._festival_spaces = {(s.row, s.col): s for s in data.festival_spaces}
+        self._region_names = [ct.region_name for ct in data.customer_tokens]
         # parlours[board_id] = list of MilkingParlour sorted by parlour_num
         self._parlours: dict[int, list] = {}
         for p in data.milking_parlours:
@@ -97,7 +110,7 @@ class BoardDisplay:
     def _build_ui(self) -> None:
         # title bar
         top = tk.Frame(self._root, bg="#37474F", pady=5)
-        top.grid(row=0, column=0, columnspan=2, sticky="ew")
+        top.grid(row=0, column=0, columnspan=3, sticky="ew")
         self._turn_label = tk.Label(
             top, text="Turn —", fg="white", bg="#37474F",
             font=("Helvetica", 12, "bold"),
@@ -137,10 +150,19 @@ class BoardDisplay:
             lbl.pack(anchor="w")
             self._quad_labels[venue] = lbl
 
-            canvas = tk.Canvas(frame, width=w, height=h, bg="white",
-                               highlightthickness=0)
-            canvas.pack()
-            self._canvases[venue] = canvas
+            if venue == "VILLES":
+                row_frame = tk.Frame(frame, bg="#ECEFF1")
+                row_frame.pack()
+                canvas = tk.Canvas(row_frame, width=w, height=h, bg="white",
+                                   highlightthickness=0)
+                canvas.pack(side="left")
+                self._canvases[venue] = canvas
+                self._build_villes_table(row_frame)
+            else:
+                canvas = tk.Canvas(frame, width=w, height=h, bg="white",
+                                   highlightthickness=0)
+                canvas.pack()
+                self._canvases[venue] = canvas
 
         # sidebar: player stats
         sidebar = tk.Frame(self._root, bg="#ECEFF1", padx=6)
@@ -158,6 +180,11 @@ class BoardDisplay:
                            justify="left", bg="white", fg=colour, anchor="w")
             lbl.pack(fill="x")
             self._player_labels.append(lbl)
+
+        # score breakdown table (far right)
+        score_frame = tk.Frame(self._root, bg="#ECEFF1", padx=6)
+        score_frame.grid(row=1, column=2, sticky="n", pady=8)
+        self._build_score_table(score_frame)
 
         self._root.update()
 
@@ -418,6 +445,7 @@ class BoardDisplay:
             elif space.space_id in mp:
                 self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
         self._draw_resource_row(c, n_rows, resource_workers)
+        self._update_villes_table(occupied)
 
     def _redraw_festival(self, occupied: dict[tuple[int, int], int], workers: dict[tuple[int, int], int], mp: dict[tuple[int, int], int], resource_workers: dict[int, int]) -> None:
         c = self._canvases["FESTIVAL"]
@@ -444,6 +472,166 @@ class BoardDisplay:
                 elif (row, col) in mp:
                     self._draw_milking_parlour_marker(c, row - 1, col - 1, mp[(row, col)])
         self._draw_resource_row(c, self._fest_rows, resource_workers)
+
+    def _build_villes_table(self, parent: tk.Frame) -> None:
+        tbl = tk.Frame(parent, bg="#ECEFF1")
+        tbl.pack(side="left", anchor="n", padx=(6, 0))
+
+        # Header row
+        tk.Label(tbl, text="", width=7, bg="#ECEFF1",
+                 font=("Courier", 7)).grid(row=0, column=0)
+        for pid in range(4):
+            tk.Label(
+                tbl, text=f"P{pid}", width=3,
+                bg=_PLAYER_COLOURS[pid], fg="white",
+                font=("Courier", 7, "bold"),
+            ).grid(row=0, column=pid + 1, padx=1)
+
+        self._villes_table_cells: dict[str, dict[int, tk.Label]] = {}
+        for row_idx, region in enumerate(self._region_names):
+            tk.Label(
+                tbl, text=region[:7], width=7, bg="#ECEFF1",
+                font=("Courier", 7), anchor="w",
+            ).grid(row=row_idx + 1, column=0)
+            self._villes_table_cells[region] = {}
+            for pid in range(4):
+                lbl = tk.Label(
+                    tbl, text="0", width=3,
+                    bg="white", fg="#424242",
+                    font=("Courier", 7),
+                )
+                lbl.grid(row=row_idx + 1, column=pid + 1, padx=1, pady=1)
+                self._villes_table_cells[region][pid] = lbl
+
+    def _update_villes_table(self, occupied: dict[int, int]) -> None:
+        influence: dict[str, dict[int, int]] = {
+            r: {p: 0 for p in range(4)} for r in self._region_names
+        }
+        for space_id, pid in occupied.items():
+            sp = self._villes_spaces.get(space_id)
+            if sp:
+                for region in sp.regions:
+                    if region in influence:
+                        influence[region][pid] += 1
+
+        for region, cells in self._villes_table_cells.items():
+            inf = influence[region]
+            max_count = max(inf.values())
+            leaders = {p for p, c in inf.items() if c == max_count and max_count > 0}
+            for pid, lbl in cells.items():
+                count = inf[pid]
+                if pid in leaders and len(leaders) == 1:
+                    # sole leader — highlight with player colour
+                    lbl.config(
+                        text=str(count),
+                        bg=_PLAYER_COLOURS[pid], fg="white",
+                        font=("Courier", 7, "bold"),
+                    )
+                elif pid in leaders:
+                    # tied leaders — lighter tint
+                    lbl.config(
+                        text=str(count),
+                        bg="#E0E0E0", fg="#424242",
+                        font=("Courier", 7, "bold"),
+                    )
+                else:
+                    lbl.config(
+                        text=str(count),
+                        bg="white", fg="#424242",
+                        font=("Courier", 7),
+                    )
+
+    def _build_score_table(self, parent: tk.Frame) -> None:
+        tk.Label(parent, text="Score Breakdown", font=("Helvetica", 10, "bold"),
+                 bg="#ECEFF1").pack(anchor="w", pady=(0, 4))
+
+        tbl = tk.Frame(parent, bg="#ECEFF1")
+        tbl.pack(fill="x")
+
+        # Header row
+        tk.Label(tbl, text="", width=9, bg="#ECEFF1",
+                 font=("Courier", 7)).grid(row=0, column=0)
+        for pid in range(4):
+            tk.Label(
+                tbl, text=f"P{pid}", width=4,
+                bg=_PLAYER_COLOURS[pid], fg="white",
+                font=("Courier", 7, "bold"),
+            ).grid(row=0, column=pid + 1, padx=1)
+
+        self._score_cells: dict[str, dict[int, tk.Label]] = {}
+        for row_idx, (field, label) in enumerate(_SCORE_ROW_DEFS):
+            tk.Label(
+                tbl, text=label, width=9, bg="#ECEFF1",
+                font=("Courier", 7), anchor="w",
+            ).grid(row=row_idx + 1, column=0)
+            self._score_cells[field] = {}
+            for pid in range(4):
+                lbl = tk.Label(
+                    tbl, text="—", width=4,
+                    bg="white", fg="#424242",
+                    font=("Courier", 7),
+                )
+                lbl.grid(row=row_idx + 1, column=pid + 1, padx=1, pady=1)
+                self._score_cells[field][pid] = lbl
+
+        # Separator
+        sep_row = len(_SCORE_ROW_DEFS) + 1
+        tk.Frame(tbl, bg="#90A4AE", height=1).grid(
+            row=sep_row, column=0, columnspan=5, sticky="ew", pady=2,
+        )
+
+        # Total row
+        tk.Label(
+            tbl, text="TOTAL", width=9, bg="#ECEFF1",
+            font=("Courier", 7, "bold"), anchor="w",
+        ).grid(row=sep_row + 1, column=0)
+        self._total_cells: dict[int, tk.Label] = {}
+        for pid in range(4):
+            lbl = tk.Label(
+                tbl, text="—", width=4,
+                bg="white", fg="#424242",
+                font=("Courier", 7, "bold"),
+            )
+            lbl.grid(row=sep_row + 1, column=pid + 1, padx=1, pady=1)
+            self._total_cells[pid] = lbl
+
+    def update_scores(self, breakdowns: list) -> None:
+        """Populate the score breakdown table with end-game results."""
+        bd_map: dict[int, object] = {b.player_id: b for b in breakdowns}
+
+        for field, cells in self._score_cells.items():
+            for pid, lbl in cells.items():
+                bd = bd_map.get(pid)
+                val = getattr(bd, field, 0) if bd else 0
+                lbl.config(text=str(val), bg="white", fg="#424242",
+                           font=("Courier", 7))
+
+        max_total = max((b.total for b in breakdowns), default=0)
+        for pid, lbl in self._total_cells.items():
+            bd = bd_map.get(pid)
+            val = bd.total if bd else 0
+            if val == max_total:
+                lbl.config(
+                    text=str(val),
+                    bg=_PLAYER_COLOURS[pid], fg="white",
+                    font=("Courier", 7, "bold"),
+                )
+            else:
+                lbl.config(
+                    text=str(val),
+                    bg="white", fg="#424242",
+                    font=("Courier", 7, "bold"),
+                )
+
+    def clear_scores(self) -> None:
+        """Reset score breakdown table to dashes (pre-game-over state)."""
+        for cells in self._score_cells.values():
+            for lbl in cells.values():
+                lbl.config(text="—", bg="white", fg="#424242",
+                           font=("Courier", 7))
+        for lbl in self._total_cells.values():
+            lbl.config(text="—", bg="white", fg="#424242",
+                       font=("Courier", 7, "bold"))
 
     def _update_sidebar(self, state: "GameState") -> None:
         _res = {"STRUCTURE": "STR", "LIVESTOCK": "LST", "FRUIT": "FRT", "ORDER": "ORD"}
