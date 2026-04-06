@@ -212,22 +212,29 @@ def _apply_updates(
     reward_loss: float,
     reward_per_pp: float,
 ) -> None:
-    """Apply TD(0) updates in reverse chronological order for each player."""
-    rewards: dict[int, float] = {}
+    """Apply TD(0) updates in reverse chronological order for each player.
+
+    Only the player's *last* transition receives the terminal reward.
+    All intermediate transitions use reward=0 so the Q-learning bootstrap
+    propagates the terminal signal backward without inflating intermediate targets.
+    """
+    terminal_rewards: dict[int, float] = {}
     for score in scores:
         pid = score.player_id
         base = reward_win if pid in winner_ids else reward_loss
-        rewards[pid] = base + reward_per_pp * score.total
+        terminal_rewards[pid] = base + reward_per_pp * score.total
 
-    # Group transitions by player, preserving order
+    # Group transitions by player, preserving chronological order
     by_player: dict[int, list[_Transition]] = {pid: [] for pid in range(4)}
     for t in transitions:
         by_player[t[1]].append(t)
 
     for pid, player_transitions in by_player.items():
-        reward = rewards[pid]
-        for pre_state, player_id, action, post_state in reversed(player_transitions):
-            agent.update(pre_state, player_id, action, reward, post_state)
+        terminal_reward = terminal_rewards[pid]
+        for i, (pre_state, player_id, action, post_state) in enumerate(reversed(player_transitions)):
+            # i == 0 is the last transition (reversed); it gets the terminal reward
+            r = terminal_reward if i == 0 else 0.0
+            agent.update(pre_state, player_id, action, r, post_state)
 
 
 def _std(values: list[float]) -> float:
