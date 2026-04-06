@@ -633,11 +633,18 @@ class BoardDisplay:
             lbl.config(text="—", bg="white", fg="#424242",
                        font=("Courier", 7, "bold"))
 
+    @staticmethod
+    def _fmt_order(oc) -> str:
+        _cheese = {"SOFT": "S", "HARD": "H", "BLEU": "B"}
+        _age    = {"BRONZE": "Br", "SILVER": "Si", "GOLD": "Go"}
+        return f"{_cheese[oc.cheese_type.name]}-{_age[oc.age.name]}"
+
     def _update_sidebar(self, state: "GameState") -> None:
-        _res = {"STRUCTURE": "STR", "LIVESTOCK": "LST", "FRUIT": "FRT", "ORDER": "ORD"}
+        _res = {"STRUCTURE": "STR", "LIVESTOCK": "LST", "FRUIT": "FRT"}
         for player in state.players:
             pid = player.player_id
-            res_parts = [f"{_res[r.name]}:{v}" for r, v in player.resources.items()]
+            res_parts = [f"{_res[r.name]}:{v}" for r, v in player.resources.items()
+                         if r.name in _res]
             fruit_stock = next((v for r, v in player.resources.items() if r.name == "FRUIT"), 0)
             fruit_str = (
                 f"  Fruit: {fruit_stock} stock  "
@@ -661,14 +668,17 @@ class BoardDisplay:
                 f"[{_slot_names[i]}:{costs[i]}STR]" if unlocked else f"({_slot_names[i]}:{costs[i]}STR)"
                 for i, unlocked in enumerate(player.structures_unlocked)
             )
+            hand_str = " ".join(self._fmt_order(o) for o in player.order_cards_held) or "—"
+            done_str = " ".join(self._fmt_order(o) for o in player.orders_completed) or "—"
             text = (
                 f"Player {pid}  (board {player.board_id})\n"
-                f"  Tokens: {player.cheese_tokens_remaining:>2}  "
-                f"Orders: {len(player.orders_completed)}\n"
+                f"  Tokens: {player.cheese_tokens_remaining:>2}\n"
                 f"  {' '.join(res_parts)}\n"
                 f"{fruit_str}\n"
                 f"  {workers_str}\n"
                 f"  {unlocked_str}\n"
-                f"  {parlour_str}"
+                f"  {parlour_str}\n"
+                f"  Hand: {hand_str}\n"
+                f"  Done: {done_str}"
             )
             self._player_labels[pid].config(text=text)
