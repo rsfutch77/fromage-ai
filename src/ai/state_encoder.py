@@ -108,6 +108,26 @@ Suggested full vector layout (~129 base features + scoring-derived features):
 
 Reward shaping design
 ----------------------
+Terminal reward:
+  At game end, the agent's reward encodes both the score and the tiebreaker:
+
+    terminal_reward = score_total + tokens_placed / 16
+
+  tokens_placed = 15 − cheese_tokens_remaining, so the fractional bonus is
+  in [0, 0.9375) — always less than 1 point. Score differences always dominate;
+  token deployment only distinguishes tied scores. The agent therefore learns
+  both objectives in the correct priority order: maximise score first, maximise
+  cheese placed second.
+
+  Using the raw score (not a win/loss binary) preserves cardinal information —
+  a binary signal collapses a 45-point game and a 12-point game into the same
+  reward. The /16 tiebreaker makes the tiebreaker rule trainable rather than
+  a post-hoc evaluation label; the agent will develop a preference for deploying
+  all its tokens even when it cannot improve its score.
+
+  Win/loss labels for evaluation statistics still use scoring.winner(), which
+  applies the same tiebreaker logic (most tokens placed, then shared victory).
+
 The training reward function should use intermediate (per-placement) rewards,
 not only a terminal reward. The credit assignment problem is severe over a
 ~15-action horizon per player; early placements become nearly invisible under
