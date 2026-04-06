@@ -203,6 +203,7 @@
 ### Outputs
 - `src/ui/__init__.py` — empty package marker
 - `src/ui/board_display.py` — `BoardDisplay` class (tkinter Canvas-based)
+- `src/ui/_score_widgets.py` — `ScoreTable` and `VillesTable` widget classes (extracted during code review to keep board_display.py within 500-line limit)
 
 ### Coding Tasks
 - [x] Create `src/ui/__init__.py`
@@ -217,13 +218,13 @@
 
 #### Code Review Tasks
 - [x] Review if you made any files that are too long, try to keep them below around 500 lines
-  - `board_display.py` ~240 lines. `simulation.py` unchanged in size.
+  - Original `board_display.py` was 724 lines. Refactored: extracted `ScoreTable` and `VillesTable` into `src/ui/_score_widgets.py` (230 lines); `board_display.py` now 516 lines. `simulation.py` unchanged at 208 lines.
 - [x] Review for duplicated code and try to consolidate and use imports instead
-  - `_draw_space` helper centralises all rectangle + player-dot drawing; `_redraw_*` methods share it.
+  - `_draw_space` helper centralises all rectangle + player-dot drawing; `_redraw_*` methods share it. `_PLAYER_COLOURS` constant intentionally kept in both `board_display.py` and `_score_widgets.py` to avoid a shared-constants module for a single 1-line value.
 - [x] Review if you made any changes that need to be propagated to requirements, milestones, or plans
-  - No requirements changes needed; milestone outputs and tasks are fully reflected above.
+  - Added `src/ui/_score_widgets.py` to Outputs list above.
 - [x] Check to make sure we have explicit imports and minimal coupling
-  - `board_display.py` imports from `src.game.types` only at call time (inside `_update_quad_labels`); `simulation.py` imports `BoardDisplay` under `TYPE_CHECKING` only — no runtime circular dependency.
+  - `_score_widgets.py` imports only `tkinter` at runtime (no game layer). `board_display.py` imports `VENUE_ORDER` at call time inside `_update_quad_labels`; `simulation.py` imports `BoardDisplay` under `TYPE_CHECKING` only — no runtime circular dependency.
 
 ---
 

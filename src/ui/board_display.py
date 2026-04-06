@@ -19,6 +19,8 @@ import tkinter as tk
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from src.ui._score_widgets import ScoreTable, VillesTable
+
 if TYPE_CHECKING:
     from src.game.data_loader import GameDataLoader
     from src.game.state import GameState
@@ -29,18 +31,6 @@ if TYPE_CHECKING:
 
 _CELL = 28          # px per cheese-space cell
 _PAD  = 4           # px padding between cells
-
-# Score-breakdown table rows: (ScoreBreakdown field name, display label)
-_SCORE_ROW_DEFS: list[tuple[str, str]] = [
-    ("festival",         "Festival"),
-    ("villes",           "Customer"),
-    ("fromagerie",       "Fromager"),
-    ("bistro",           "Bistro"),
-    ("orders",           "Orders"),
-    ("fruit",            "Fruit"),
-    ("headquarters",     "HQ"),
-    ("unused_resources", "Unused"),
-]
 
 # Cheese type → fill colour
 _CHEESE_FILL: dict[str, str] = {
@@ -60,7 +50,7 @@ _AGE_OUTLINE: dict[str, str] = {
     "GOLD":   "#FFB300",
 }
 
-# Player 0-3 → accent colour
+# Player 0-3 → accent colour (kept in sync with _score_widgets._PLAYER_COLOURS)
 _PLAYER_COLOURS = ["#EF5350", "#42A5F5", "#66BB6A", "#FFA726"]
 
 
@@ -82,8 +72,7 @@ class BoardDisplay:
         self._villes_spaces  = {s.space_id: s for s in data.villes_spaces}
         self._festival_spaces = {(s.row, s.col): s for s in data.festival_spaces}
         self._region_names = [ct.region_name for ct in data.customer_tokens]
-        # win/tie point values per region for the villes table label
-        self._customer_token_values: dict[str, tuple[int, int]] = {
+        customer_token_values: dict[str, tuple[int, int]] = {
             ct.region_name: (ct.win_value, ct.tie_value)
             for ct in data.customer_tokens
         }
@@ -108,11 +97,11 @@ class BoardDisplay:
         self._root.resizable(False, False)
         self._root.configure(bg="#ECEFF1")
 
-        self._build_ui()
+        self._build_ui(customer_token_values)
 
     # ── UI construction ────────────────────────────────────────────────────
 
-    def _build_ui(self) -> None:
+    def _build_ui(self, customer_token_values: dict[str, tuple[int, int]]) -> None:
         # title bar
         top = tk.Frame(self._root, bg="#37474F", pady=5)
         top.grid(row=0, column=0, columnspan=3, sticky="ew")
@@ -164,7 +153,9 @@ class BoardDisplay:
                                    highlightthickness=0)
                 canvas.pack(side="left")
                 self._canvases[venue] = canvas
-                self._build_villes_table(row_frame)
+                self._villes_table = VillesTable(
+                    row_frame, self._region_names, customer_token_values,
+                )
             else:
                 canvas = tk.Canvas(frame, width=w, height=h, bg="white",
                                    highlightthickness=0)
@@ -191,7 +182,7 @@ class BoardDisplay:
         # score breakdown table (far right)
         score_frame = tk.Frame(self._root, bg="#ECEFF1", padx=6)
         score_frame.grid(row=1, column=2, sticky="n", pady=8)
-        self._build_score_table(score_frame)
+        self._score_table = ScoreTable(score_frame)
 
         self._root.update()
 
@@ -206,13 +197,7 @@ class BoardDisplay:
 
     # ── token drawing ──────────────────────────────────────────────────────
 
-    def _draw_worker_ring(
-        self,
-        canvas: tk.Canvas,
-        row: int,
-        col: int,
-        player_id: int,
-    ) -> None:
+    def _draw_worker_ring(self, canvas: tk.Canvas, row: int, col: int, player_id: int) -> None:
         """Draw a thick coloured ring inside the cell to mark a placed worker."""
         x1, y1, x2, y2 = self._cell_xy(row, col)
         inset = 3
@@ -223,13 +208,7 @@ class BoardDisplay:
             width=3,
         )
 
-    def _draw_milking_parlour_marker(
-        self,
-        canvas: tk.Canvas,
-        row: int,
-        col: int,
-        player_id: int,
-    ) -> None:
+    def _draw_milking_parlour_marker(self, canvas: tk.Canvas, row: int, col: int, player_id: int) -> None:
         """Draw a small diamond to mark a milking-parlour-placed token (no worker)."""
         x1, y1, x2, y2 = self._cell_xy(row, col)
         cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
@@ -240,12 +219,7 @@ class BoardDisplay:
             fill=colour, outline="white", width=1,
         )
 
-    def _draw_resource_row(
-        self,
-        canvas: tk.Canvas,
-        row_idx: int,
-        resource_workers: dict[int, int],
-    ) -> None:
+    def _draw_resource_row(self, canvas: tk.Canvas, row_idx: int, resource_workers: dict[int, int]) -> None:
         """Draw the 3 resource-tile spaces (Bronze=1, Silver=2, Gold=3) at *row_idx*.
 
         resource_workers maps space_id (1/2/3) → player_id when a worker occupies it.
@@ -305,14 +279,20 @@ class BoardDisplay:
         """Destroy the tkinter window."""
         self._root.destroy()
 
+    def update_scores(self, breakdowns: list) -> None:
+        """Populate the score breakdown table with end-game results."""
+        self._score_table.update(breakdowns)
+
+    def clear_scores(self) -> None:
+        """Reset score breakdown table to dashes (pre-game-over state)."""
+        self._score_table.clear()
+
     # ── internal update helpers ────────────────────────────────────────────
 
     def _update_quad_labels(self, state: "GameState") -> None:
         from src.game.types import VENUE_ORDER
         for venue_idx, venue in enumerate(VENUE_ORDER):
-            # which player currently faces this venue?
             player_id = (venue_idx - state.rotation_index) % 4
-            # resource for this venue = what the facing player sees on the resource tile
             resource = state.resource_facing(player_id)
             self._quad_frames[venue.name].config(
                 text=f"{venue.name}  —  {resource.name.capitalize()}"
@@ -323,26 +303,21 @@ class BoardDisplay:
             )
 
     def _update_venues(self, state: "GameState") -> None:
-        from src.game.types import VENUE_ORDER
-
         fromag: dict[int, int] = {}
         bistro: dict[int, int] = {}
         villes: dict[int, int] = {}
         festival: dict[tuple[int, int], int] = {}
 
-        # worker rings (worker-placed tokens)
         w_fromag: dict[int, int] = {}
         w_bistro: dict[int, int] = {}
         w_villes: dict[int, int] = {}
         w_festival: dict[tuple[int, int], int] = {}
 
-        # milking parlour markers (token placed, no worker)
         mp_fromag: dict[int, int] = {}
         mp_bistro: dict[int, int] = {}
         mp_villes: dict[int, int] = {}
         mp_festival: dict[tuple[int, int], int] = {}
 
-        # resource tile workers: venue_name → {space_id → player_id}
         resource_on_tile: dict[str, dict[int, int]] = {
             "FROMAGERIE": {}, "BISTRO": {}, "VILLES": {}, "FESTIVAL": {},
         }
@@ -450,7 +425,7 @@ class BoardDisplay:
             elif space.space_id in mp:
                 self._draw_milking_parlour_marker(c, row, col, mp[space.space_id])
         self._draw_resource_row(c, n_rows, resource_workers)
-        self._update_villes_table(occupied)
+        self._villes_table.update(occupied, self._villes_spaces)
 
     def _redraw_festival(self, occupied: dict[tuple[int, int], int], workers: dict[tuple[int, int], int], mp: dict[tuple[int, int], int], resource_workers: dict[int, int]) -> None:
         c = self._canvases["FESTIVAL"]
@@ -477,189 +452,6 @@ class BoardDisplay:
                 elif (row, col) in mp:
                     self._draw_milking_parlour_marker(c, row - 1, col - 1, mp[(row, col)])
         self._draw_resource_row(c, self._fest_rows, resource_workers)
-
-    def _build_villes_table(self, parent: tk.Frame) -> None:
-        tbl = tk.Frame(parent, bg="#ECEFF1")
-        tbl.pack(side="left", anchor="n", padx=(6, 0))
-
-        # Header row
-        tk.Label(tbl, text="", width=7, bg="#ECEFF1",
-                 font=("Courier", 7)).grid(row=0, column=0)
-        for pid in range(4):
-            tk.Label(
-                tbl, text=f"P{pid}", width=3,
-                bg=_PLAYER_COLOURS[pid], fg="white",
-                font=("Courier", 7, "bold"),
-            ).grid(row=0, column=pid + 1, padx=1)
-
-        self._villes_table_cells: dict[str, dict[int, tk.Label]] = {}
-        self._villes_region_labels: dict[str, tk.Label] = {}
-        for row_idx, region in enumerate(self._region_names):
-            lbl = tk.Label(
-                tbl, text=region, width=11, bg="#ECEFF1",
-                font=("Courier", 7), anchor="w",
-            )
-            lbl.grid(row=row_idx + 1, column=0)
-            self._villes_region_labels[region] = lbl
-            self._villes_table_cells[region] = {}
-            for pid in range(4):
-                lbl = tk.Label(
-                    tbl, text="0", width=3,
-                    bg="white", fg="#424242",
-                    font=("Courier", 7),
-                )
-                lbl.grid(row=row_idx + 1, column=pid + 1, padx=1, pady=1)
-                self._villes_table_cells[region][pid] = lbl
-
-    def _update_villes_table(self, occupied: dict[int, int]) -> None:
-        influence: dict[str, dict[int, int]] = {
-            r: {p: 0 for p in range(4)} for r in self._region_names
-        }
-        for space_id, pid in occupied.items():
-            sp = self._villes_spaces.get(space_id)
-            if sp:
-                for region in sp.regions:
-                    if region in influence:
-                        influence[region][pid] += 1
-
-        for region, cells in self._villes_table_cells.items():
-            inf = influence[region]
-            max_count = max(inf.values())
-            leaders = {p for p, c in inf.items() if c == max_count and max_count > 0}
-
-            # Update region label with customer points
-            win_val, tie_val = self._customer_token_values.get(region, (0, 0))
-            rlbl = self._villes_region_labels[region]
-            if not leaders:
-                rlbl.config(text=region, fg="#424242", bg="#ECEFF1", font=("Courier", 7))
-            elif len(leaders) == 1:
-                sole = next(iter(leaders))
-                rlbl.config(
-                    text=f"{region} ({win_val})",
-                    fg=_PLAYER_COLOURS[sole], bg="#ECEFF1",
-                    font=("Courier", 7, "bold"),
-                )
-            else:
-                rlbl.config(
-                    text=f"{region} ({tie_val})",
-                    fg="#757575", bg="#ECEFF1",
-                    font=("Courier", 7),
-                )
-
-            for pid, lbl in cells.items():
-                count = inf[pid]
-                if pid in leaders and len(leaders) == 1:
-                    # sole leader — highlight with player colour
-                    lbl.config(
-                        text=str(count),
-                        bg=_PLAYER_COLOURS[pid], fg="white",
-                        font=("Courier", 7, "bold"),
-                    )
-                elif pid in leaders:
-                    # tied leaders — lighter tint
-                    lbl.config(
-                        text=str(count),
-                        bg="#E0E0E0", fg="#424242",
-                        font=("Courier", 7, "bold"),
-                    )
-                else:
-                    lbl.config(
-                        text=str(count),
-                        bg="white", fg="#424242",
-                        font=("Courier", 7),
-                    )
-
-    def _build_score_table(self, parent: tk.Frame) -> None:
-        tk.Label(parent, text="Score Breakdown", font=("Helvetica", 10, "bold"),
-                 bg="#ECEFF1").pack(anchor="w", pady=(0, 4))
-
-        tbl = tk.Frame(parent, bg="#ECEFF1")
-        tbl.pack(fill="x")
-
-        # Header row
-        tk.Label(tbl, text="", width=9, bg="#ECEFF1",
-                 font=("Courier", 7)).grid(row=0, column=0)
-        for pid in range(4):
-            tk.Label(
-                tbl, text=f"P{pid}", width=4,
-                bg=_PLAYER_COLOURS[pid], fg="white",
-                font=("Courier", 7, "bold"),
-            ).grid(row=0, column=pid + 1, padx=1)
-
-        self._score_cells: dict[str, dict[int, tk.Label]] = {}
-        for row_idx, (field, label) in enumerate(_SCORE_ROW_DEFS):
-            tk.Label(
-                tbl, text=label, width=9, bg="#ECEFF1",
-                font=("Courier", 7), anchor="w",
-            ).grid(row=row_idx + 1, column=0)
-            self._score_cells[field] = {}
-            for pid in range(4):
-                lbl = tk.Label(
-                    tbl, text="—", width=4,
-                    bg="white", fg="#424242",
-                    font=("Courier", 7),
-                )
-                lbl.grid(row=row_idx + 1, column=pid + 1, padx=1, pady=1)
-                self._score_cells[field][pid] = lbl
-
-        # Separator
-        sep_row = len(_SCORE_ROW_DEFS) + 1
-        tk.Frame(tbl, bg="#90A4AE", height=1).grid(
-            row=sep_row, column=0, columnspan=5, sticky="ew", pady=2,
-        )
-
-        # Total row
-        tk.Label(
-            tbl, text="TOTAL", width=9, bg="#ECEFF1",
-            font=("Courier", 7, "bold"), anchor="w",
-        ).grid(row=sep_row + 1, column=0)
-        self._total_cells: dict[int, tk.Label] = {}
-        for pid in range(4):
-            lbl = tk.Label(
-                tbl, text="—", width=4,
-                bg="white", fg="#424242",
-                font=("Courier", 7, "bold"),
-            )
-            lbl.grid(row=sep_row + 1, column=pid + 1, padx=1, pady=1)
-            self._total_cells[pid] = lbl
-
-    def update_scores(self, breakdowns: list) -> None:
-        """Populate the score breakdown table with end-game results."""
-        bd_map: dict[int, object] = {b.player_id: b for b in breakdowns}
-
-        for field, cells in self._score_cells.items():
-            for pid, lbl in cells.items():
-                bd = bd_map.get(pid)
-                val = getattr(bd, field, 0) if bd else 0
-                lbl.config(text=str(val), bg="white", fg="#424242",
-                           font=("Courier", 7))
-
-        max_total = max((b.total for b in breakdowns), default=0)
-        for pid, lbl in self._total_cells.items():
-            bd = bd_map.get(pid)
-            val = bd.total if bd else 0
-            if val == max_total:
-                lbl.config(
-                    text=str(val),
-                    bg=_PLAYER_COLOURS[pid], fg="white",
-                    font=("Courier", 7, "bold"),
-                )
-            else:
-                lbl.config(
-                    text=str(val),
-                    bg="white", fg="#424242",
-                    font=("Courier", 7, "bold"),
-                )
-
-    def clear_scores(self) -> None:
-        """Reset score breakdown table to dashes (pre-game-over state)."""
-        for cells in self._score_cells.values():
-            for lbl in cells.values():
-                lbl.config(text="—", bg="white", fg="#424242",
-                           font=("Courier", 7))
-        for lbl in self._total_cells.values():
-            lbl.config(text="—", bg="white", fg="#424242",
-                       font=("Courier", 7, "bold"))
 
     @staticmethod
     def _fmt_order(oc) -> str:
