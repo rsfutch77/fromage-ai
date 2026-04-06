@@ -122,7 +122,7 @@ class BoardDisplay:
         grid_frame.grid(row=1, column=0, padx=8, pady=8)
 
         venues = ["FROMAGERIE", "BISTRO", "VILLES", "FESTIVAL"]
-        positions = [(0, 0), (0, 1), (1, 0), (1, 1)]
+        positions = [(0, 1), (1, 1), (1, 0), (0, 0)]
         canvas_dims = {
             "FROMAGERIE": (3, 7),   # (cols, rows): 6 cheese rows + 1 resource row
             "BISTRO":     (3, 10),  # 9 table rows + 1 resource row (widened to 3)
@@ -131,6 +131,7 @@ class BoardDisplay:
         }
 
         self._quad_labels: dict[str, tk.Label] = {}
+        self._quad_frames: dict[str, tk.LabelFrame] = {}
         self._canvases: dict[str, tk.Canvas] = {}
 
         for venue, (gr, gc) in zip(venues, positions):
@@ -144,6 +145,7 @@ class BoardDisplay:
                 bg="#ECEFF1", padx=4, pady=2,
             )
             frame.grid(row=gr, column=gc, padx=5, pady=5, sticky="nsew")
+            self._quad_frames[venue] = frame
 
             lbl = tk.Label(frame, text="← Player —", font=("Helvetica", 8),
                            bg="#ECEFF1", fg="#757575")
@@ -301,14 +303,18 @@ class BoardDisplay:
     # ── internal update helpers ────────────────────────────────────────────
 
     def _update_quad_labels(self, state: "GameState") -> None:
-        from src.game.types import VENUE_ORDER
+        from src.game.types import VENUE_ORDER, RESOURCE_ORDER
         for venue_idx, venue in enumerate(VENUE_ORDER):
+            # Resource type is fixed to the venue (rotates with the board).
+            resource = RESOURCE_ORDER[(venue_idx + state.resource_tile_orientation) % 4]
+            self._quad_frames[venue.name].config(
+                text=f"{venue.name}  —  {resource.name.capitalize()}"
+            )
             # which player currently faces this venue?
             player_id = (venue_idx - state.rotation_index) % 4
-            resource = state.resource_facing(player_id).name.capitalize()
             colour = _PLAYER_COLOURS[player_id]
             self._quad_labels[venue.name].config(
-                text=f"← Player {player_id}  ·  {resource}", fg=colour,
+                text=f"← Player {player_id}", fg=colour,
             )
 
     def _update_venues(self, state: "GameState") -> None:
@@ -331,8 +337,10 @@ class BoardDisplay:
         mp_villes: dict[int, int] = {}
         mp_festival: dict[tuple[int, int], int] = {}
 
-        # resource tile workers: player_id → set of space_ids occupied (1/2/3)
-        resource_on_tile: dict[int, set[int]] = {0: set(), 1: set(), 2: set(), 3: set()}
+        # resource tile workers: venue_name → {space_id → player_id}
+        resource_on_tile: dict[str, dict[int, int]] = {
+            "FROMAGERIE": {}, "BISTRO": {}, "VILLES": {}, "FESTIVAL": {},
+        }
 
         for player in state.players:
             pid = player.player_id
@@ -359,10 +367,11 @@ class BoardDisplay:
             for w in player.workers:
                 if w.location.name == "IN_HAND":
                     continue
-                if w.location.name == "ON_RESOURCE_TILE" and w.space_id is not None:
-                    resource_on_tile[pid].add(w.space_id)
-                    continue
                 vname = w.venue.name if w.venue else None
+                if w.location.name == "ON_RESOURCE_TILE" and w.space_id is not None:
+                    if vname in resource_on_tile:
+                        resource_on_tile[vname][w.space_id] = pid
+                    continue
                 if vname == "FROMAGERIE" and w.space_id is not None:
                     w_fromag[w.space_id] = pid
                 elif vname == "BISTRO" and w.space_id is not None:
@@ -372,19 +381,10 @@ class BoardDisplay:
                 elif vname == "FESTIVAL" and w.row is not None and w.col is not None:
                     w_festival[(w.row, w.col)] = pid
 
-        # Build per-venue resource worker dicts: space_id → player_id for the
-        # player whose perspective corresponds to each venue quadrant.
-        res: dict[str, dict[int, int]] = {}
-        for venue_idx, venue in enumerate(VENUE_ORDER):
-            facing_pid = (venue_idx - state.rotation_index) % 4
-            res[venue.name] = {
-                sid: facing_pid for sid in resource_on_tile[facing_pid]
-            }
-
-        self._redraw_fromagerie(fromag, w_fromag, mp_fromag, res["FROMAGERIE"])
-        self._redraw_bistro(bistro, w_bistro, mp_bistro, res["BISTRO"])
-        self._redraw_villes(villes, w_villes, mp_villes, res["VILLES"])
-        self._redraw_festival(festival, w_festival, mp_festival, res["FESTIVAL"])
+        self._redraw_fromagerie(fromag, w_fromag, mp_fromag, resource_on_tile["FROMAGERIE"])
+        self._redraw_bistro(bistro, w_bistro, mp_bistro, resource_on_tile["BISTRO"])
+        self._redraw_villes(villes, w_villes, mp_villes, resource_on_tile["VILLES"])
+        self._redraw_festival(festival, w_festival, mp_festival, resource_on_tile["FESTIVAL"])
 
     def _redraw_fromagerie(self, occupied: dict[int, int], workers: dict[int, int], mp: dict[int, int], resource_workers: dict[int, int]) -> None:
         c = self._canvases["FROMAGERIE"]

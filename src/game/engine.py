@@ -203,7 +203,7 @@ def _apply_gather_inplace(
         raise IllegalActionError(f"Player {player_id} has no worker in hand to gather")
 
     gather_worker.location = WorkerLocation.ON_RESOURCE_TILE
-    gather_worker.venue = None
+    gather_worker.venue = state.venue_facing(player_id)
     gather_worker.space_id = action.resource_space.turns  # 1/2/3 for Bronze/Silver/Gold
     gather_worker.return_after_rotation = (state.rotation_index + action.resource_space.turns) % 4
 
