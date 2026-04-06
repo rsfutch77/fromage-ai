@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 
 from rich.table import Table
 
+from src.game.types import AgeType
+
 if TYPE_CHECKING:
     from src.game.simulation import GameResult
 
@@ -51,6 +53,14 @@ class BaselineStats:
         Mean number of turns per game.
     score_percentiles : dict[int, float]
         10/25/50/75/90th percentiles of total scores.
+    worker_by_age : dict[AgeType, float]
+        Mean worker placements per age tier across all player-games.
+    parlour_by_age : dict[AgeType, float]
+        Mean parlour placements per age tier across all player-games.
+    winner_worker_by_age : dict[AgeType, float]
+        Mean worker placements per age tier for winning player-games only.
+    winner_parlour_by_age : dict[AgeType, float]
+        Mean parlour placements per age tier for winning player-games only.
     """
 
     def __init__(self, results: list["GameResult"]) -> None:
@@ -71,6 +81,14 @@ class BaselineStats:
         category_sums: dict[str, float] = {c: 0.0 for c in _CATEGORIES}
         totals: list[float] = []
 
+        # Worker vs parlour placement counts per age tier
+        ages = list(AgeType)
+        worker_sums: dict[AgeType, float] = {a: 0.0 for a in ages}
+        parlour_sums: dict[AgeType, float] = {a: 0.0 for a in ages}
+        winner_worker_sums: dict[AgeType, float] = {a: 0.0 for a in ages}
+        winner_parlour_sums: dict[AgeType, float] = {a: 0.0 for a in ages}
+        n_winner_player_games: int = 0
+
         for result in self._results:
             winner_set = set(result.winner_ids)
             for sb in result.scores:
@@ -80,6 +98,21 @@ class BaselineStats:
                 for cat in _CATEGORIES:
                     category_sums[cat] += getattr(sb, cat)
                 totals.append(float(sb.total))
+
+            for player in result.final_state.players:
+                pid = player.player_id
+                is_winner = pid in winner_set
+                if is_winner:
+                    n_winner_player_games += 1
+                for pc in player.cheese_tokens_on_board:
+                    if pc.from_milking_parlour:
+                        parlour_sums[pc.age] += 1.0
+                        if is_winner:
+                            winner_parlour_sums[pc.age] += 1.0
+                    else:
+                        worker_sums[pc.age] += 1.0
+                        if is_winner:
+                            winner_worker_sums[pc.age] += 1.0
 
         n_player_games = len(totals)  # == n_games * 4
 
@@ -95,6 +128,20 @@ class BaselineStats:
         sorted_totals = sorted(totals)
         self.score_percentiles: dict[int, float] = {
             p: _percentile(sorted_totals, p) for p in _PERCENTILE_MARKS
+        }
+
+        self.worker_by_age: dict[AgeType, float] = {
+            a: worker_sums[a] / n_player_games for a in ages
+        }
+        self.parlour_by_age: dict[AgeType, float] = {
+            a: parlour_sums[a] / n_player_games for a in ages
+        }
+        _w_denom = n_winner_player_games if n_winner_player_games > 0 else 1
+        self.winner_worker_by_age: dict[AgeType, float] = {
+            a: winner_worker_sums[a] / _w_denom for a in ages
+        }
+        self.winner_parlour_by_age: dict[AgeType, float] = {
+            a: winner_parlour_sums[a] / _w_denom for a in ages
         }
 
     # ------------------------------------------------------------------
@@ -134,6 +181,23 @@ class BaselineStats:
         for p in _PERCENTILE_MARKS:
             misc_table.add_row(f"P{p} total score", f"{self.score_percentiles[p]:.1f}")
         console.print(misc_table)
+
+        # --- Worker vs parlour by age tier ---
+        wp_table = Table(title="Worker vs Parlour Placements by Age Tier (mean per player-game)", show_lines=False)
+        wp_table.add_column("Age", justify="left")
+        wp_table.add_column("Workers (all)", justify="right")
+        wp_table.add_column("Parlours (all)", justify="right")
+        wp_table.add_column("Workers (winners)", justify="right")
+        wp_table.add_column("Parlours (winners)", justify="right")
+        for age in AgeType:
+            wp_table.add_row(
+                age.name.capitalize(),
+                f"{self.worker_by_age[age]:.2f}",
+                f"{self.parlour_by_age[age]:.2f}",
+                f"{self.winner_worker_by_age[age]:.2f}",
+                f"{self.winner_parlour_by_age[age]:.2f}",
+            )
+        console.print(wp_table)
 
         return buf.getvalue()
 
