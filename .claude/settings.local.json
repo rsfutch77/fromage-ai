@@ -9,7 +9,8 @@
       "Bash(python debug_turn1.py)",
       "Bash(python -m pytest tests/test_actions.py tests/test_engine.py -x -q)",
       "Bash(python -m pytest -x -q)",
-      "Bash(python -m pytest tests/test_plots.py -x -q)"
+      "Bash(python -m pytest tests/test_plots.py -x -q)",
+      "Bash(python -m pytest tests/test_training.py -v --tb=short)"
     ]
   }
 }

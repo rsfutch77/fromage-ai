@@ -371,15 +371,15 @@
 - **Focus**: Implement self-play Q-learning training (section 11) — the `train` and `evaluate` functions in `src/ai/training.py`, checkpoint saving, training-log JSONL output, and the `src/train.py` CLI entry point.
 
 ### Plan Review
-- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+- [x] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
   - Section 11 specifies shared-weight self-play, Monte Carlo-style reverse-order updates, evaluation cadence (every 500 games), checkpoint cadence (every 1000 games), log schema, and all `train.py` CLI flags. `evaluate` return dict keys are listed. No ambiguity.
-- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+- [x] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
   - All items in 11.1.1–11.1.5 and 11.2.1–11.2.2 are covered. Learning-performance charts (section 13) remain deferred to Milestone 9.
-- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+- [x] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
   - `QAgent` and `encode_state` are prerequisites (Milestone 7). Charts L1–L4 and `hyperparameter_signals.csv` depend on training output and are deferred to Milestone 9 so this milestone ships a working trainer first.
-- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+- [x] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
   - `training.py` ≈ 200 lines, `train.py` ≈ 80 lines, `test_training.py` ≈ 60 lines — all within 500-line limit.
-- [ ] Define convenient feature flags.
+- [x] Define convenient feature flags.
   - `EVAL_INTERVAL = 500` and `CHECKPOINT_INTERVAL = 1000` module constants in `training.py` (mirrored in `agent_config.json` as `eval_interval` and `checkpoint_interval`); `--learning-plots` CLI flag on `train.py` gated to False until Milestone 9.
 
 ### Outputs
@@ -390,19 +390,19 @@
 - `tests/test_training.py` — training loop tests (req 11.2.2)
 
 ### Coding Tasks
-- [ ] 11.1.1 `train(n_games, data, config_path) -> QAgent` in `src/ai/training.py`: create 4 `QAgent` instances sharing one weight vector; run `n_games` self-play; after each game compute rewards (win/loss + optional PP delta) and call `update` for each player's transitions; decay ε linearly
-- [ ] 11.1.2 Store per-game transitions as `(state_vector, action_index, reward, next_state_vector)`; apply updates in reverse chronological order within the game
-- [ ] 11.1.3 Log training metrics every `EVAL_INTERVAL` games: mean total score, win rate vs. random (100 eval games), current ε; write one JSON line to `output/training_log.jsonl` per log event
-- [ ] 11.1.4 Save checkpoint every `CHECKPOINT_INTERVAL` games to `models/checkpoint_{game_num}.npz`; save final model to `models/trained_agent.npz`
-- [ ] 11.1.5 `evaluate(agent, n_games, data) -> dict`: run `n_games` with 1 `QAgent` vs. 3 `RandomAgents`; return `{win_rate, mean_pp, mean_pp_delta_vs_random}`
-- [ ] 11.2.1 `src/train.py`: CLI args `--games` (default 10000), `--config` (default `config/agent_config.json`), `--seed` (optional); call `train()`; print final evaluation summary via `rich`
-- [ ] 11.2.2 Write `tests/test_training.py`: run minimal training loop of 20 games; verify Q-weights differ from initial values; verify `evaluate` returns expected keys with values in valid ranges
+- [x] 11.1.1 `train(n_games, data, config_path) -> QAgent` in `src/ai/training.py`: create 4 `QAgent` instances sharing one weight vector; run `n_games` self-play; after each game compute rewards (win/loss + optional PP delta) and call `update` for each player's transitions; decay ε linearly
+- [x] 11.1.2 Store per-game transitions as `(state_vector, action_index, reward, next_state_vector)`; apply updates in reverse chronological order within the game
+- [x] 11.1.3 Log training metrics every `EVAL_INTERVAL` games: mean total score, win rate vs. random (100 eval games), current ε; write one JSON line to `output/training_log.jsonl` per log event
+- [x] 11.1.4 Save checkpoint every `CHECKPOINT_INTERVAL` games to `models/checkpoint_{game_num}.npz`; save final model to `models/trained_agent.npz`
+- [x] 11.1.5 `evaluate(agent, n_games, data) -> dict`: run `n_games` with 1 `QAgent` vs. 3 `RandomAgents`; return `{win_rate, mean_pp, mean_pp_delta_vs_random}`
+- [x] 11.2.1 `src/train.py`: CLI args `--games` (default 10000), `--config` (default `config/agent_config.json`), `--seed` (optional); call `train()`; print final evaluation summary via `rich`
+- [x] 11.2.2 Write `tests/test_training.py`: run minimal training loop of 20 games; verify Q-weights differ from initial values; verify `evaluate` returns expected keys with values in valid ranges
 
 #### Code Review Tasks
-- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
-- [ ] Review for duplicated code and try to consolidate and use imports instead
-- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
-- [ ] Check to make sure we have explicit imports and minimal coupling
+- [x] Review if you made any files that are too long, try to keep them below around 500 lines
+- [x] Review for duplicated code and try to consolidate and use imports instead
+- [x] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [x] Check to make sure we have explicit imports and minimal coupling
 
 ---
 

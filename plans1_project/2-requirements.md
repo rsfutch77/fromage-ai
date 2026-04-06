@@ -211,16 +211,16 @@
 
 ---
 
-[ ] 11. Training Loop
-  [ ] 11.1 Self-Play Training
-    [ ] 11.1.1 Implement `train(n_games: int, data: GameDataLoader, config_path: Path) -> QAgent` in `src/ai/training.py`: create 4 `QAgent` instances sharing the same weight vector (cooperative training against self); run `n_games` of self-play; after each game, compute rewards (win/loss + optional PP delta) and call `update` for each player's transitions; decay `epsilon` linearly from `epsilon_start` to `epsilon_end` over `epsilon_decay_games`.
-    [ ] 11.1.2 After each game, store transitions as `(state_vector, action_index, reward, next_state_vector)` tuples; apply updates in reverse chronological order within the game (Monte Carlo-style within Q-learning).
-    [ ] 11.1.3 Log training metrics every 500 games: mean total score, win rate vs. random agent over 100 evaluation games, current epsilon; use Python `logging`.
-    [ ] 11.1.4 Save the model checkpoint every 1000 games to `models/checkpoint_{game_num}.npz`; always save the final model to `models/trained_agent.npz`.
-    [ ] 11.1.5 Implement `evaluate(agent: QAgent, n_games: int, data: GameDataLoader) -> dict` in `src/ai/training.py`: run `n_games` with 1 trained `QAgent` vs. 3 `RandomAgents`; return `{win_rate: float, mean_pp: float, mean_pp_delta_vs_random: float}`.
-  [ ] 11.2 Training Entry Point
-    [ ] 11.2.1 Implement `src/train.py` as a runnable script: parse CLI args `--games` (default 10000), `--config` (default `config/agent_config.json`), `--seed` (optional); call `train()`; print final evaluation summary using `rich`.
-    [ ] 11.2.2 Write `tests/test_training.py`: run a minimal training loop of 20 games; verify the agent's Q-weights change from their initial values; verify `evaluate` returns a dict with the expected keys and values in valid ranges.
+[x] 11. Training Loop
+  [x] 11.1 Self-Play Training
+    [x] 11.1.1 Implement `train(n_games: int, data: GameDataLoader, config_path: Path) -> QAgent` in `src/ai/training.py`: create 4 `QAgent` instances sharing the same weight vector (cooperative training against self); run `n_games` of self-play; after each game, compute rewards (win/loss + optional PP delta) and call `update` for each player's transitions; decay `epsilon` linearly from `epsilon_start` to `epsilon_end` over `epsilon_decay_games`.
+    [x] 11.1.2 After each game, store transitions as `(state_vector, action_index, reward, next_state_vector)` tuples; apply updates in reverse chronological order within the game (Monte Carlo-style within Q-learning).
+    [x] 11.1.3 Log training metrics every 500 games: mean total score, win rate vs. random agent over 100 evaluation games, current epsilon; use Python `logging`.
+    [x] 11.1.4 Save the model checkpoint every 1000 games to `models/checkpoint_{game_num}.npz`; always save the final model to `models/trained_agent.npz`.
+    [x] 11.1.5 Implement `evaluate(agent: QAgent, n_games: int, data: GameDataLoader) -> dict` in `src/ai/training.py`: run `n_games` with 1 trained `QAgent` vs. 3 `RandomAgents`; return `{win_rate: float, mean_pp: float, mean_pp_delta_vs_random: float}`.
+  [x] 11.2 Training Entry Point
+    [x] 11.2.1 Implement `src/train.py` as a runnable script: parse CLI args `--games` (default 10000), `--config` (default `config/agent_config.json`), `--seed` (optional); call `train()`; print final evaluation summary using `rich`.
+    [x] 11.2.2 Write `tests/test_training.py`: run a minimal training loop of 20 games; verify the agent's Q-weights change from their initial values; verify `evaluate` returns a dict with the expected keys and values in valid ranges.
 
 ---
 

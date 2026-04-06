@@ -8,5 +8,7 @@
   "reward_loss": 0.0,
   "reward_per_pp": 0.0,
   "model_save_dir": "models/",
-  "use_network_approx": false
+  "use_network_approx": false,
+  "eval_interval": 500,
+  "checkpoint_interval": 1000
 }
