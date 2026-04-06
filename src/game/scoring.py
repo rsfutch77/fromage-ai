@@ -89,21 +89,18 @@ def score_festival(
         if sp.space_type == SpaceType.FREE_SAMPLE
     }
 
-    # All occupied positions (any player's token + free samples)
-    all_occupied: set[tuple[int, int]] = free_sample_positions | {
-        (pc.row, pc.col)
-        for pc in all_placed_cheese
-        if pc.venue == VenueType.FESTIVAL
-    }
+    # Each player scores independently: only their own tokens + free samples
+    # are traversable. Other players' tokens are irrelevant.
+    own_occupied: set[tuple[int, int]] = player_positions | free_sample_positions
 
-    if not all_occupied:
+    if not player_positions:
         return 0
 
-    # BFS to find connected components
+    # BFS to find connected components within own_occupied
     visited: set[tuple[int, int]] = set()
     total = 0
 
-    for start in all_occupied:
+    for start in own_occupied:
         if start in visited:
             continue
         # BFS
@@ -111,13 +108,13 @@ def score_festival(
         queue = [start]
         while queue:
             pos = queue.pop()
-            if pos in visited or pos not in all_occupied:
+            if pos in visited or pos not in own_occupied:
                 continue
             visited.add(pos)
             group.add(pos)
             r, c = pos
             for nr, nc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
-                if (nr, nc) not in visited and (nr, nc) in all_occupied:
+                if (nr, nc) not in visited and (nr, nc) in own_occupied:
                     queue.append((nr, nc))
 
         # Only score this group if the player has at least one token in it
