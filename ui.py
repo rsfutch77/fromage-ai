@@ -29,6 +29,12 @@ from src.ui.board_display import BoardDisplay
 _PHASE_PLACE  = "place"
 _PHASE_ROTATE = "rotate"
 
+# Structure slot names — index matches structures_unlocked list
+_STRUCT_NAMES = ["Barn", "Dock", "Grnhs", "HQ"]
+
+# Player accent colours (mirrors board_display._PLAYER_COLOURS)
+_PLAYER_COLOURS = ["#EF5350", "#42A5F5", "#66BB6A", "#FFA726"]
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fromage board visualiser")
@@ -97,6 +103,19 @@ def main() -> None:
             state="normal" if at_tip() and not game_over else "disabled",
         )
 
+        # Update debug structure buttons to reflect current tip state
+        tip_state = history[-1][1]
+        can_debug = at_tip() and not game_over
+        for pid in range(4):
+            for slot in range(4):
+                unlocked = tip_state.players[pid].structures_unlocked[slot]
+                btn = _struct_btns[pid][slot]
+                btn.config(
+                    relief="sunken" if unlocked else "raised",
+                    bg="#A5D6A7" if unlocked else "#F5F5F5",
+                    state="normal" if can_debug else "disabled",
+                )
+
     def _action_label() -> str:
         if current_phase() == _PHASE_PLACE:
             return "Place Workers ▶"
@@ -147,6 +166,23 @@ def main() -> None:
             do_action()
         display.root.after(args.delay, do_auto)
 
+    def do_toggle_structure(player_id: int, slot_idx: int) -> None:
+        """Debug: toggle structure slot on/off in the tip state.
+
+        Safe because:
+        - actions.py only generates unlock actions for locked slots, so a
+          debug-forced unlock is never re-spent via normal game logic.
+        - engine.py raises IllegalActionError if a slot is already unlocked,
+          providing a second layer of protection.
+        Only operates on the tip state; no-op when browsing history.
+        """
+        if not at_tip() or game_over:
+            return
+        tip_state = history[-1][1]
+        player = tip_state.players[player_id]
+        player.structures_unlocked[slot_idx] = not player.structures_unlocked[slot_idx]
+        refresh()
+
     # ── control bar ────────────────────────────────────────────────────────
     ctrl = tk.Frame(display.root, bg="#ECEFF1", pady=4)
     ctrl.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 6))
@@ -166,6 +202,35 @@ def main() -> None:
 
     tk.Label(ctrl, textvariable=status_var, bg="#ECEFF1", fg="#37474F",
              font=("Helvetica", 9)).pack(side="left", padx=8)
+
+    # ── debug: force-unlock structures ─────────────────────────────────────
+    dbg = tk.LabelFrame(
+        display.root, text="Debug — Force Structures (tip only)",
+        font=("Helvetica", 8), bg="#ECEFF1", padx=6, pady=4,
+    )
+    dbg.grid(row=3, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 8))
+
+    # Header row: slot labels
+    for col, name in enumerate(_STRUCT_NAMES):
+        tk.Label(dbg, text=name, font=("Helvetica", 8, "bold"),
+                 bg="#ECEFF1", width=6).grid(row=0, column=col + 1, padx=2)
+
+    # One row per player
+    _struct_btns: list[list[tk.Button]] = []
+    for pid in range(4):
+        tk.Label(dbg, text=f"P{pid}", font=("Helvetica", 8, "bold"),
+                 bg="#ECEFF1", fg=_PLAYER_COLOURS[pid], width=3).grid(
+            row=pid + 1, column=0, padx=(0, 4))
+        row_btns: list[tk.Button] = []
+        for slot in range(4):
+            btn = tk.Button(
+                dbg, text=_STRUCT_NAMES[slot], width=6,
+                font=("Helvetica", 7),
+                command=lambda p=pid, s=slot: do_toggle_structure(p, s),
+            )
+            btn.grid(row=pid + 1, column=slot + 1, padx=2, pady=1)
+            row_btns.append(btn)
+        _struct_btns.append(row_btns)
 
     display.root.bind("<Left>",  lambda _: do_prev())
     display.root.bind("<Right>", lambda _: do_fwd())
