@@ -188,26 +188,26 @@
 
 ---
 
-[ ] 9. State Encoding
-  [ ] 9.1 Feature Vector
-    [ ] 9.1.1 Implement `encode_state(state: GameState, player_id: int, data: GameDataLoader) -> np.ndarray` in `src/ai/state_encoder.py`: produce a fixed-length float32 numpy vector representing the state from `player_id`'s perspective.
-    [ ] 9.1.2 Own-player features to include: resources (4 values), workers available in hand (3 binary), cheese_tokens_remaining (1 value, normalised 0–1), structures_unlocked (1 value, normalised 0–1), orders_completed count (1), orders_held count (1), fruit_spent_on_fruited (1), fruit_spent_on_jam (1), milking_parlours_used count (1), board_id one-hot (4 binary).
-    [ ] 9.1.3 Board state features: rotation_index one-hot (4 binary), resource_facing one-hot (4 binary), venue_facing one-hot (4 binary).
-    [ ] 9.1.4 Venue occupancy features: for each venue, binary vector of occupied spaces (own tokens vs. any token) — Fromagerie 18, Bistro 18, Villes 18, Festival 25 spaces = 79 binary features × 2 (own/any) = 158 features.
-    [ ] 9.1.5 Opponent summary features (per opponent, 3 opponents): cheese_tokens_remaining (normalised), orders_completed count, total cheese placed count = 3 features × 3 opponents = 9 features.
-    [ ] 9.1.6 Document the total vector length as a module constant `STATE_VECTOR_SIZE` and add an assertion in `encode_state` that the output length equals `STATE_VECTOR_SIZE`.
-    [ ] 9.1.7 Write `tests/test_state_encoder.py`: verify `encode_state` returns a vector of length `STATE_VECTOR_SIZE`; verify all values are in range [0, 1] (or known fixed range); verify output is deterministic for the same state.
+[x] 9. State Encoding
+  [x] 9.1 Feature Vector
+    [x] 9.1.1 Implement `encode_state(state: GameState, player_id: int, data: GameDataLoader) -> np.ndarray` in `src/ai/state_encoder.py`: produce a fixed-length float32 numpy vector representing the state from `player_id`'s perspective.
+    [x] 9.1.2 Own-player features to include: resources (4 values), workers available in hand (3 binary), cheese_tokens_remaining (1 value, normalised 0–1), structures_unlocked (1 value, normalised 0–1), orders_completed count (1), orders_held count (1), fruit_spent_on_fruited (1), fruit_spent_on_jam (1), milking_parlours_used count (1), board_id one-hot (4 binary).
+    [x] 9.1.3 Board state features: rotation_index one-hot (4 binary), resource_facing one-hot (4 binary), venue_facing one-hot (4 binary).
+    [x] 9.1.4 Venue occupancy features: for each venue, binary vector of occupied spaces (own tokens vs. any token) — Fromagerie 18, Bistro 18, Villes 18, Festival 25 spaces = 79 binary features × 2 (own/any) = 158 features.
+    [x] 9.1.5 Opponent summary features (per opponent, 3 opponents): cheese_tokens_remaining (normalised), orders_completed count, total cheese placed count = 3 features × 3 opponents = 9 features.
+    [x] 9.1.6 Document the total vector length as a module constant `STATE_VECTOR_SIZE` and add an assertion in `encode_state` that the output length equals `STATE_VECTOR_SIZE`.
+    [x] 9.1.7 Write `tests/test_state_encoder.py`: verify `encode_state` returns a vector of length `STATE_VECTOR_SIZE`; verify all values are in range [0, 1] (or known fixed range); verify output is deterministic for the same state.
 
 ---
 
-[ ] 10. Q-Learning Agent
-  [ ] 10.1 Q-Function
-    [ ] 10.1.1 Implement `QAgent` class in `src/ai/q_agent.py` subclassing `Agent`; use a linear Q-function approximator: `Q(s, a) = w · φ(s, a)` where `φ(s, a)` is the concatenation of `encode_state(s)` and a one-hot encoding of the action index; weight vector `w` stored as `np.ndarray` of shape `(STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN,)`.
-    [ ] 10.1.2 Alternatively (configurable via `agent_config.json`): use a table-free approach where Q-values are estimated per legal action by passing state features through a small feedforward network (2 hidden layers, 64 units each, ReLU) using numpy only (no PyTorch/TensorFlow).
-    [ ] 10.1.3 Implement `QAgent.choose_action(state, player_id) -> TurnAction`: compute Q-values for all legal actions; apply ε-greedy policy — with probability `epsilon` choose a random legal action, otherwise choose the argmax action.
-    [ ] 10.1.4 Implement `QAgent.update(state, player_id, action, reward, next_state)`: apply the Q-learning update rule: `w ← w + α * (reward + γ * max_a' Q(s', a') - Q(s, a)) * ∇Q(s, a)`; use learning rate `alpha` and discount `gamma` from config.
-    [ ] 10.1.5 Implement `QAgent.save(path: Path)` and `QAgent.load(path: Path)`: serialise/deserialise the weight vector and hyperparameters as a `.npz` file.
-    [ ] 10.1.6 Create `config/agent_config.json` with keys: `epsilon_start` (float, default 1.0), `epsilon_end` (float, default 0.05), `epsilon_decay_games` (int, default 5000), `alpha` (float, default 0.001), `gamma` (float, default 0.95), `reward_win` (float, default 1.0), `reward_loss` (float, default 0.0), `reward_per_pp` (float, default 0.0 — set > 0 to reward intermediate scoring progress), `model_save_dir` (string, default `"models/"`).
+[x] 10. Q-Learning Agent
+  [x] 10.1 Q-Function
+    [x] 10.1.1 Implement `QAgent` class in `src/ai/q_agent.py` subclassing `Agent`; use a linear Q-function approximator: `Q(s, a) = w · φ(s, a)` where `φ(s, a)` is the concatenation of `encode_state(s)` and a one-hot encoding of the action index; weight vector `w` stored as `np.ndarray` of shape `(STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN,)`.
+    [x] 10.1.2 Alternatively (configurable via `agent_config.json`): use a table-free approach where Q-values are estimated per legal action by passing state features through a small feedforward network (2 hidden layers, 64 units each, ReLU) using numpy only (no PyTorch/TensorFlow).
+    [x] 10.1.3 Implement `QAgent.choose_action(state, player_id) -> TurnAction`: compute Q-values for all legal actions; apply ε-greedy policy — with probability `epsilon` choose a random legal action, otherwise choose the argmax action.
+    [x] 10.1.4 Implement `QAgent.update(state, player_id, action, reward, next_state)`: apply the Q-learning update rule: `w ← w + α * (reward + γ * max_a' Q(s', a') - Q(s, a)) * ∇Q(s, a)`; use learning rate `alpha` and discount `gamma` from config.
+    [x] 10.1.5 Implement `QAgent.save(path: Path)` and `QAgent.load(path: Path)`: serialise/deserialise the weight vector and hyperparameters as a `.npz` file.
+    [x] 10.1.6 Create `config/agent_config.json` with keys: `epsilon_start` (float, default 1.0), `epsilon_end` (float, default 0.05), `epsilon_decay_games` (int, default 5000), `alpha` (float, default 0.001), `gamma` (float, default 0.95), `reward_win` (float, default 1.0), `reward_loss` (float, default 0.0), `reward_per_pp` (float, default 0.0 — set > 0 to reward intermediate scoring progress), `model_save_dir` (string, default `"models/"`).
 
 ---
 

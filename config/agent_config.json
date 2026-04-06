@@ -7,5 +7,6 @@
   "reward_win": 1.0,
   "reward_loss": 0.0,
   "reward_per_pp": 0.0,
-  "model_save_dir": "models/"
+  "model_save_dir": "models/",
+  "use_network_approx": false
 }

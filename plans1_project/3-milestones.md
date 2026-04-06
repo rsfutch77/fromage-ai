@@ -325,15 +325,15 @@
 - **Focus**: Implement the fixed-length state encoder (section 9) and the linear Q-function approximator with ε-greedy policy and weight-update rule (section 10). No training loop yet — this milestone delivers the buildable pieces so Milestone 8 can wire them together.
 
 ### Plan Review
-- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+- [x] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
   - Sections 9.1 and 10.1 fully specify feature-vector layout, Q-function representation choices, ε-greedy policy, update rule, save/load format, and config keys. The alternative feedforward-network path (10.1.2) is configurable but numpy-only; no ambiguity on implementation constraints.
-- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+- [x] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
   - All encoder sub-vectors (own-player, board, venue occupancy, opponent summary) are enumerated with sizes totalling `STATE_VECTOR_SIZE`. All `QAgent` public methods are specified. `agent_config.json` keys are listed.
-- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+- [x] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
   - Training loop (section 11), entry point (`src/train.py`), and `evaluate` function are deferred to Milestone 8 to keep this milestone focused on the data/model layer.
-- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+- [x] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
   - `state_encoder.py` ≈ 120 lines, `q_agent.py` ≈ 160 lines, `agent_config.json` < 20 lines, `test_state_encoder.py` ≈ 60 lines, `test_q_agent.py` ≈ 80 lines — all within 500-line limit.
-- [ ] Define convenient feature flags.
+- [x] Define convenient feature flags.
   - `STATE_VECTOR_SIZE` module constant in `state_encoder.py` (asserted at runtime). `USE_NETWORK_APPROX` boolean key in `agent_config.json` switches between linear and feedforward Q-function.
 
 ### Outputs
@@ -344,26 +344,26 @@
 - `tests/test_q_agent.py` — Q-agent unit tests (req 10.1 methods)
 
 ### Coding Tasks
-- [ ] 9.1.1 `encode_state(state, player_id, data) -> np.ndarray` in `src/ai/state_encoder.py`
-- [ ] 9.1.2 Own-player sub-vector: resources (4), workers in hand (3 binary), cheese_tokens_remaining (1, normalised), structures_unlocked fraction (1), orders_completed count (1), orders_held count (1), fruit_spent_on_fruited (1), fruit_spent_on_jam (1), milking_parlours_used count (1), board_id one-hot (4)
-- [ ] 9.1.3 Board state sub-vector: rotation_index one-hot (4), resource_facing one-hot (4), venue_facing one-hot (4)
-- [ ] 9.1.4 Venue occupancy sub-vector: for each venue (Fromagerie 18, Bistro 18, Villes 18, Festival 25 = 79 spaces), binary own-token and any-token flags = 158 features
-- [ ] 9.1.5 Opponent summary sub-vector: per opponent (3): cheese_tokens_remaining (normalised), orders_completed, total cheese placed = 9 features
-- [ ] 9.1.6 `STATE_VECTOR_SIZE` constant; assert output length in `encode_state`
-- [ ] 9.1.7 Write `tests/test_state_encoder.py`: verify length == `STATE_VECTOR_SIZE`; verify all values in [0, 1]; verify determinism
-- [ ] 10.1.1 `QAgent` class in `src/ai/q_agent.py`: linear approximator `Q(s,a) = w · φ(s,a)`; weight vector shape `(STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN,)`
-- [ ] 10.1.2 Feedforward alternative (2 hidden layers, 64 units, ReLU, numpy only) behind `USE_NETWORK_APPROX` config flag
-- [ ] 10.1.3 `QAgent.choose_action(state, player_id) -> TurnAction`: compute Q-values for all legal actions; ε-greedy selection
-- [ ] 10.1.4 `QAgent.update(state, player_id, action, reward, next_state)`: Q-learning update `w ← w + α(r + γ max_a' Q(s',a') − Q(s,a)) ∇Q(s,a)`
-- [ ] 10.1.5 `QAgent.save(path: Path)` and `QAgent.load(path: Path)`: serialise weights + hyperparameters as `.npz`
-- [ ] 10.1.6 Create `config/agent_config.json` with keys: `epsilon_start`, `epsilon_end`, `epsilon_decay_games`, `alpha`, `gamma`, `reward_win`, `reward_loss`, `reward_per_pp`, `model_save_dir`, `use_network_approx`
-- [ ] Write `tests/test_q_agent.py`: verify `choose_action` returns a valid `TurnAction`; verify `update` changes the weight vector; verify save/load round-trip preserves weights; verify ε=1.0 produces random choices
+- [x] 9.1.1 `encode_state(state, player_id, data) -> np.ndarray` in `src/ai/state_encoder.py`
+- [x] 9.1.2 Own-player sub-vector: resources (4), workers in hand (3 binary), cheese_tokens_remaining (1, normalised), structures_unlocked fraction (1), orders_completed count (1), orders_held count (1), fruit_spent_on_fruited (1), fruit_spent_on_jam (1), milking_parlours_used count (1), board_id one-hot (4)
+- [x] 9.1.3 Board state sub-vector: rotation_index one-hot (4), resource_facing one-hot (4), venue_facing one-hot (4)
+- [x] 9.1.4 Venue occupancy sub-vector: for each venue (Fromagerie 18, Bistro 18, Villes 18, Festival 25 = 79 spaces), binary own-token and any-token flags = 158 features
+- [x] 9.1.5 Opponent summary sub-vector: per opponent (3): cheese_tokens_remaining (normalised), orders_completed, total cheese placed = 9 features
+- [x] 9.1.6 `STATE_VECTOR_SIZE` constant; assert output length in `encode_state`
+- [x] 9.1.7 Write `tests/test_state_encoder.py`: verify length == `STATE_VECTOR_SIZE`; verify all values in [0, 1]; verify determinism
+- [x] 10.1.1 `QAgent` class in `src/ai/q_agent.py`: linear approximator `Q(s,a) = w · φ(s,a)`; weight vector shape `(STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN,)`
+- [x] 10.1.2 Feedforward alternative (2 hidden layers, 64 units, ReLU, numpy only) behind `USE_NETWORK_APPROX` config flag
+- [x] 10.1.3 `QAgent.choose_action(state, player_id) -> TurnAction`: compute Q-values for all legal actions; ε-greedy selection
+- [x] 10.1.4 `QAgent.update(state, player_id, action, reward, next_state)`: Q-learning update `w ← w + α(r + γ max_a' Q(s',a') − Q(s,a)) ∇Q(s,a)`
+- [x] 10.1.5 `QAgent.save(path: Path)` and `QAgent.load(path: Path)`: serialise weights + hyperparameters as `.npz`
+- [x] 10.1.6 Create `config/agent_config.json` with keys: `epsilon_start`, `epsilon_end`, `epsilon_decay_games`, `alpha`, `gamma`, `reward_win`, `reward_loss`, `reward_per_pp`, `model_save_dir`, `use_network_approx`
+- [x] Write `tests/test_q_agent.py`: verify `choose_action` returns a valid `TurnAction`; verify `update` changes the weight vector; verify save/load round-trip preserves weights; verify ε=1.0 produces random choices
 
 #### Code Review Tasks
-- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
-- [ ] Review for duplicated code and try to consolidate and use imports instead
-- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
-- [ ] Check to make sure we have explicit imports and minimal coupling
+- [x] Review if you made any files that are too long, try to keep them below around 500 lines
+- [x] Review for duplicated code and try to consolidate and use imports instead
+- [x] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [x] Check to make sure we have explicit imports and minimal coupling
 
 ---
 
