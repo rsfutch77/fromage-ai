@@ -136,14 +136,19 @@ def _gain_resource_inplace(
     else:
         player.resources[resource] = player.resources.get(resource, 0) + amount
 
-        # Greenhouse: if unlocked and resource matches board's greenhouse_resource,
-        # add 1 extra unit (at most once per turn).
-        if not ctx.greenhouse_fired and player.structures_unlocked[_GREENHOUSE_IDX]:
-            board_struct = _get_board_struct(data, player.board_id)
-            if resource == board_struct.greenhouse_resource:
-                ctx.greenhouse_fired = True
+    # Greenhouse: if unlocked and resource matches board's greenhouse_resource,
+    # add 1 extra unit (at most once per turn). Applies to ORDER draws too.
+    if not ctx.greenhouse_fired and player.structures_unlocked[_GREENHOUSE_IDX]:
+        board_struct = _get_board_struct(data, player.board_id)
+        if resource == board_struct.greenhouse_resource:
+            ctx.greenhouse_fired = True
+            if resource == ResourceType.ORDER:
+                bonus = state.order_card_deck[:1]
+                state.order_card_deck = state.order_card_deck[1:]
+                player.order_cards_held.extend(bonus)
+            else:
                 player.resources[resource] += 1
-                logger.debug("Greenhouse triggered for player %d (+1 %s)", player_id, resource)
+            logger.debug("Greenhouse triggered for player %d (+1 %s)", player_id, resource)
 
 
 def _check_order_completion_inplace(player: PlayerState, placed: PlacedCheese) -> None:
