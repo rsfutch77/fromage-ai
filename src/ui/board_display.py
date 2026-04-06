@@ -638,6 +638,12 @@ class BoardDisplay:
         for player in state.players:
             pid = player.player_id
             res_parts = [f"{_res[r.name]}:{v}" for r, v in player.resources.items()]
+            fruit_stock = next((v for r, v in player.resources.items() if r.name == "FRUIT"), 0)
+            fruit_str = (
+                f"  Fruit: {fruit_stock} stock  "
+                f"→chz:{player.fruit_spent_on_fruited}  "
+                f"→jam:{player.fruit_spent_on_jam}"
+            )
             workers_str = " ".join(
                 f"{'●' if w.location.name == 'IN_HAND' else '○'}{w.cheese_type.name[0]}"
                 for w in player.workers
@@ -660,6 +666,7 @@ class BoardDisplay:
                 f"  Tokens: {player.cheese_tokens_remaining:>2}  "
                 f"Orders: {len(player.orders_completed)}\n"
                 f"  {' '.join(res_parts)}\n"
+                f"{fruit_str}\n"
                 f"  {workers_str}\n"
                 f"  {unlocked_str}\n"
                 f"  {parlour_str}"
