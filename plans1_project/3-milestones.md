@@ -264,6 +264,135 @@
 
 ---
 
+## Milestone 6: Analysis Plots
+- **Focus**: Add matplotlib charts to `src/analyze.py` (and helpers in `src/analysis/stats.py`) that visualise simulation results stored in the SQLite DB. No new game logic — reads from `ResultsDB` only.
+
+### Plan Review
+- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+- [ ] Define convenient feature flags.
+
+### Charts
+
+#### Chart 1 — Structure build frequency by player board
+- **What**: For each of the 4 player boards, show how often each of its 4 structures was unlocked across all simulated games. That is 16 bars total (or a 4×4 grouped bar chart, one group per board).
+- **Data source**: `PlayerState.structures_unlocked` (list of 4 bools) + `PlayerState.board_id`, stored per game in `ResultsDB`.
+- **Why useful**: Reveals which structures are strong enough that the AI reliably unlocks them, and whether certain boards unlock structures more aggressively.
+
+#### Chart 2 — Average points per venue
+- **What**: Bar chart with 4 bars (Fromagerie, Bistro, Villes, Festival) showing the mean score contribution of each venue across all games and all players.
+- **Data source**: `ScoreBreakdown` fields `fromagerie`, `bistro`, `villes`, `festival` returned by `score_game`; stored per player per game in `ResultsDB`.
+- **Why useful**: Immediately shows which venue is the dominant scoring engine so training can be targeted.
+
+#### Chart 3 — Win rate per player board
+- **What**: Bar chart with 4 bars (one per `board_id` 0–3) showing the fraction of games won by a player using that board.
+- **Data source**: `GameResult.winner_id` + `PlayerState.board_id`; needs a join in `ResultsDB` to map winner to their board.
+- **Why useful**: Detects structural board balance issues early — a board with a significantly higher win rate signals a balance problem in the game data or scoring.
+
+#### Chart 4 — Fruit vs jam usage
+- **What**: Stacked or side-by-side bar chart (or pie chart) comparing total `fruit_spent_on_fruited` vs `fruit_spent_on_jam` across all players and games.
+- **Data source**: `PlayerState.fruit_spent_on_fruited` and `PlayerState.fruit_spent_on_jam`, stored per player per game in `ResultsDB`.
+- **Why useful**: Shows whether the AI (and by extension the game economy) skews toward fruited or jam cheese; imbalance might indicate mispriced fruit requirements in the CSV data.
+
+#### Chart 5 — Orders as share of total score
+- **What**: Distribution (histogram or box plot) of `orders / total_score` as a percentage, across all players and games. Annotate with the mean percentage.
+- **Data source**: `ScoreBreakdown.orders` and `ScoreBreakdown.total` (or sum of all breakdown fields) per player per game in `ResultsDB`.
+- **Why useful**: Tells you at a glance whether pursuing orders is a meaningful strategy or a negligible side income. If the mean share is low, the AI can reasonably de-prioritise order collection.
+
+#### Chart 6 — Unused resources as share of total score (penalty context)
+- **What**: Distribution (histogram or box plot) of `unused_resources / total_score` as a percentage, across all players and games. Annotate with the mean percentage.
+- **Data source**: `ScoreBreakdown.unused_resources` and total score per player per game in `ResultsDB`.
+- **Why useful**: Quantifies how much the unused-resource deduction actually hurts in practice. A large mean share signals the AI is hoarding resources and needs stronger incentives to spend them.
+
+#### Chart 7 — Winner vs loser score breakdown (radar/spider chart)
+- **What**: Two overlaid polygons — mean winner scores vs mean loser scores — across all 8 `ScoreBreakdown` categories (festival, villes, fromagerie, bistro, orders, fruit, headquarters, unused_resources). Each axis is normalised to the same scale.
+- **Data source**: `ScoreBreakdown` per player + `GameResult.winner_id`.
+- **Why useful**: The category where the polygons diverge most is where winners actually pull ahead. The single highest-signal chart for identifying which part of the game to prioritise.
+
+#### Chart 8 — Board × venue synergy heatmap
+- **What**: 4×4 heatmap (board_id on one axis, venue on the other) where each cell is the mean score that board earned at that venue. Annotate each cell with the raw value.
+- **Data source**: `ScoreBreakdown` venue fields + `PlayerState.board_id`.
+- **Why useful**: Boards have explicit venue synergies built into their structure slots (Board 2 → Festival livestock, Board 3 → Villes structure, Board 4 → Bistro fruit). This confirms whether those synergies surface as higher scores in practice and by how much.
+
+#### Chart 9 — Cheese age distribution: winners vs losers
+- **What**: Grouped bar chart — Bronze / Silver / Gold token counts, split by winner vs loser (normalised to tokens per player per game so sample sizes are comparable).
+- **Data source**: `PlacedCheese.age` grouped by whether that player won, stored per game in `ResultsDB`.
+- **Why useful**: Gold workers take 3 rotations to return (real tempo cost). This shows whether the slow-but-powerful Gold strategy pays off or whether high-throughput Bronze play dominates.
+
+#### Chart 10 — Structure unlock rate: winners vs losers
+- **What**: For each of the 16 structure slots (4 boards × 4 slots), show unlock rate among winners vs losers on that board. Display as a side-by-side bar per slot.
+- **Data source**: `PlayerState.structures_unlocked` + `PlayerState.board_id` + winner status. Extends Chart 1 by splitting on outcome.
+- **Why useful**: Chart 1 shows overall frequency; this shows which specific structures distinguish winners from losers on the same board — far more actionable for a real player.
+
+#### Chart 11 — Headquarters score by board (winners vs losers)
+- **What**: Bar chart of mean `ScoreBreakdown.headquarters` per board_id, with winner/loser split. Each board's HQ condition is different (Board 1: structures deployed, Board 2: fruit/jam spent, Board 3: orders completed, Board 4: livestock in parlours).
+- **Data source**: `ScoreBreakdown.headquarters` + `PlayerState.board_id` + winner status.
+- **Why useful**: Shows which HQ condition is most achievable in practice and whether the HQ score is large enough to meaningfully swing games (i.e. is it worth spending 5 structure to unlock?).
+
+#### Chart 12 — Milking parlour usage count vs win rate
+- **What**: Bar chart with x-axis = number of parlours used (0–4) and y-axis = win rate at that count.
+- **Data source**: `PlayerState.milking_parlours_used` (count of True values) + winner status.
+- **Why useful**: A monotonically rising curve means more parlour use always helps; a plateau or dip reveals a sweet spot. Also sanity-checks whether the livestock cost is appropriately priced.
+
+#### Chart 13 — Villes region control rate and win correlation
+- **What**: Two side-by-side bars per region (6 regions): (a) fraction of games where a player controlled that region outright (not tied) and (b) win rate of the controlling player.
+- **Data source**: `GameState.villes_customer_token_holders` (region → player_id or None) + winner status. Token values (white/yellow = 9, green/pink = 8, purple/blue = 7) annotated as reference.
+- **Why useful**: Shows whether the high-value regions (white, yellow) are worth actively contesting, or whether players ignore them and win anyway via other venues.
+- **Caveat**: Regional assignments are fixed in the simulation (see `assumptions.md` — customer tokens are not randomised at game start). In a real game the tokens are shuffled, so a region that appears valuable here may simply be valuable because its fixed position is spatially advantageous on the Villes board, not because of its point value. If this chart's results are ambiguous or suspiciously region-dependent, see the stretch goal for customer token randomisation below.
+
+#### Chart 14 — Fruit balance scatter (fruited vs jam, coloured by outcome)
+- **What**: Scatter plot of `(fruit_spent_on_fruited, fruit_spent_on_jam)` per player, with winners in one colour and losers in another. Overlay the line `y = x` (perfect balance).
+- **Data source**: `PlayerState.fruit_spent_on_fruited`, `PlayerState.fruit_spent_on_jam`, winner status.
+- **Why useful**: `score_fruit = fruited_spent × jam_spent` is multiplicative — imbalanced spending is actively punished. If winning points cluster near the diagonal and losing points cluster off-axis, this is direct, non-obvious advice to a player: balance your fruit spending.
+
+### Outputs
+- `src/analysis/stats.py` — add 14 plot-producing methods to `BaselineStats` (or a new `PlotStats` class if `stats.py` is too large)
+- `src/analyze.py` — add `--plots` CLI flag; when set, generate and save all 14 charts as PNG files to an `output/` directory
+
+### Coding Tasks
+- [ ] Ensure `ResultsDB` stores per-player `structures_unlocked`, `board_id`, all `ScoreBreakdown` fields, `fruit_spent_on_fruited`, `fruit_spent_on_jam`, `milking_parlours_used`, per-player `PlacedCheese` age counts, `villes_customer_token_holders`, and `winner_id` per game (add columns to schema if Milestone 5 did not already include them)
+- [ ] Implement `plot_structure_frequency(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_venue_points(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_board_win_rate(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_fruit_vs_jam(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_orders_score_share(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_unused_resources_score_share(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_winner_vs_loser_radar(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_board_venue_heatmap(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_cheese_age_winner_loser(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_structure_unlock_winner_loser(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_headquarters_score_by_board(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_parlour_usage_win_rate(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_villes_region_control(db: ResultsDB, out_path: Path) -> None`
+- [ ] Implement `plot_fruit_balance_scatter(db: ResultsDB, out_path: Path) -> None`
+- [ ] Wire all fourteen under `--plots` flag in `src/analyze.py`; save to `output/<chart_name>.png`
+
+#### Code Review Tasks
+- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
+- [ ] Review for duplicated code and try to consolidate and use imports instead
+- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [ ] Check to make sure we have explicit imports and minimal coupling
+
+---
+
+## Stretch Goal: Customer Token Randomisation
+
+In the real game, the 6 customer tokens (purple 7, blue 7, green 8, pink 8, white 9, yellow 9) are placed randomly on the Villes board at game start. The simulation currently fixes them in CSV order (see `assumptions.md`). This means Chart 13 may conflate positional advantage (which Villes spaces are easiest to reach) with token-value advantage, making its advice unreliable for real games.
+
+**Trigger**: Run Chart 13 after Milestone 6. If the win-correlation results are clearly dominated by token point value (white/yellow always best regardless of position), fixed assignment is likely fine. If the ranking looks spatially biased or the caveat creates genuine doubt about the chart's advice, implement this stretch goal before drawing conclusions.
+
+### Required changes (in order)
+
+- [ ] Remove the "Regional assignments are fixed" entry from `assumptions.md` and add "Customer token placement is randomised at game start" to the "Things That Are Randomised" section.
+- [ ] In `setup_game` (`src/game/board.py`), shuffle the list returned by `data.customer_tokens` before assigning region positions; use the existing `seed` parameter so games remain reproducible.
+- [ ] Update `GameState.villes_customer_token_holders` initialisation in `setup_game` to reflect the shuffled assignment rather than the CSV order.
+- [ ] Update `tests/test_board.py` to verify that two games with different seeds produce different token arrangements (statistical check: run 10 seeds, assert not all identical).
+- [ ] Re-run Chart 13 after this change and compare results against the fixed-assignment run to confirm whether the spatial vs value distinction matters.
+
+---
+
 ## Stretch Goal: Fromagerie Swap Resource (trade_resource_for_any)
 
 Shelf 1 (Bronze resource-bonus) grants the player a swap: give up one resource,
