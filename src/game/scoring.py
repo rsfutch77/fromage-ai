@@ -302,7 +302,11 @@ def score_headquarters(
     condition = board.headquarters_condition.lower()
 
     if "structure" in condition:
-        return sum(player.structures_unlocked)
+        return sum(
+            board.structure_costs[i]
+            for i, unlocked in enumerate(player.structures_unlocked)
+            if unlocked
+        )
 
     if "fruit" in condition or "jam" in condition:
         return player.fruit_spent_on_fruited + player.fruit_spent_on_jam
