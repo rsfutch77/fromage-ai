@@ -321,7 +321,92 @@
 
 ---
 
-## Milestone 7: Learning Performance Charts
+## Milestone 7: State Encoding & Q-Learning Agent
+- **Focus**: Implement the fixed-length state encoder (section 9) and the linear Q-function approximator with ε-greedy policy and weight-update rule (section 10). No training loop yet — this milestone delivers the buildable pieces so Milestone 8 can wire them together.
+
+### Plan Review
+- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+  - Sections 9.1 and 10.1 fully specify feature-vector layout, Q-function representation choices, ε-greedy policy, update rule, save/load format, and config keys. The alternative feedforward-network path (10.1.2) is configurable but numpy-only; no ambiguity on implementation constraints.
+- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+  - All encoder sub-vectors (own-player, board, venue occupancy, opponent summary) are enumerated with sizes totalling `STATE_VECTOR_SIZE`. All `QAgent` public methods are specified. `agent_config.json` keys are listed.
+- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+  - Training loop (section 11), entry point (`src/train.py`), and `evaluate` function are deferred to Milestone 8 to keep this milestone focused on the data/model layer.
+- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+  - `state_encoder.py` ≈ 120 lines, `q_agent.py` ≈ 160 lines, `agent_config.json` < 20 lines, `test_state_encoder.py` ≈ 60 lines, `test_q_agent.py` ≈ 80 lines — all within 500-line limit.
+- [ ] Define convenient feature flags.
+  - `STATE_VECTOR_SIZE` module constant in `state_encoder.py` (asserted at runtime). `USE_NETWORK_APPROX` boolean key in `agent_config.json` switches between linear and feedforward Q-function.
+
+### Outputs
+- `src/ai/state_encoder.py` — `encode_state` function + `STATE_VECTOR_SIZE` constant
+- `src/ai/q_agent.py` — `QAgent` class (linear or feedforward Q-function, ε-greedy, save/load)
+- `config/agent_config.json` — hyperparameters and model-path config
+- `tests/test_state_encoder.py` — encoder tests (req 9.1.7)
+- `tests/test_q_agent.py` — Q-agent unit tests (req 10.1 methods)
+
+### Coding Tasks
+- [ ] 9.1.1 `encode_state(state, player_id, data) -> np.ndarray` in `src/ai/state_encoder.py`
+- [ ] 9.1.2 Own-player sub-vector: resources (4), workers in hand (3 binary), cheese_tokens_remaining (1, normalised), structures_unlocked fraction (1), orders_completed count (1), orders_held count (1), fruit_spent_on_fruited (1), fruit_spent_on_jam (1), milking_parlours_used count (1), board_id one-hot (4)
+- [ ] 9.1.3 Board state sub-vector: rotation_index one-hot (4), resource_facing one-hot (4), venue_facing one-hot (4)
+- [ ] 9.1.4 Venue occupancy sub-vector: for each venue (Fromagerie 18, Bistro 18, Villes 18, Festival 25 = 79 spaces), binary own-token and any-token flags = 158 features
+- [ ] 9.1.5 Opponent summary sub-vector: per opponent (3): cheese_tokens_remaining (normalised), orders_completed, total cheese placed = 9 features
+- [ ] 9.1.6 `STATE_VECTOR_SIZE` constant; assert output length in `encode_state`
+- [ ] 9.1.7 Write `tests/test_state_encoder.py`: verify length == `STATE_VECTOR_SIZE`; verify all values in [0, 1]; verify determinism
+- [ ] 10.1.1 `QAgent` class in `src/ai/q_agent.py`: linear approximator `Q(s,a) = w · φ(s,a)`; weight vector shape `(STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN,)`
+- [ ] 10.1.2 Feedforward alternative (2 hidden layers, 64 units, ReLU, numpy only) behind `USE_NETWORK_APPROX` config flag
+- [ ] 10.1.3 `QAgent.choose_action(state, player_id) -> TurnAction`: compute Q-values for all legal actions; ε-greedy selection
+- [ ] 10.1.4 `QAgent.update(state, player_id, action, reward, next_state)`: Q-learning update `w ← w + α(r + γ max_a' Q(s',a') − Q(s,a)) ∇Q(s,a)`
+- [ ] 10.1.5 `QAgent.save(path: Path)` and `QAgent.load(path: Path)`: serialise weights + hyperparameters as `.npz`
+- [ ] 10.1.6 Create `config/agent_config.json` with keys: `epsilon_start`, `epsilon_end`, `epsilon_decay_games`, `alpha`, `gamma`, `reward_win`, `reward_loss`, `reward_per_pp`, `model_save_dir`, `use_network_approx`
+- [ ] Write `tests/test_q_agent.py`: verify `choose_action` returns a valid `TurnAction`; verify `update` changes the weight vector; verify save/load round-trip preserves weights; verify ε=1.0 produces random choices
+
+#### Code Review Tasks
+- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
+- [ ] Review for duplicated code and try to consolidate and use imports instead
+- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [ ] Check to make sure we have explicit imports and minimal coupling
+
+---
+
+## Milestone 8: Training Loop & Train Entry Point
+- **Focus**: Implement self-play Q-learning training (section 11) — the `train` and `evaluate` functions in `src/ai/training.py`, checkpoint saving, training-log JSONL output, and the `src/train.py` CLI entry point.
+
+### Plan Review
+- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+  - Section 11 specifies shared-weight self-play, Monte Carlo-style reverse-order updates, evaluation cadence (every 500 games), checkpoint cadence (every 1000 games), log schema, and all `train.py` CLI flags. `evaluate` return dict keys are listed. No ambiguity.
+- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+  - All items in 11.1.1–11.1.5 and 11.2.1–11.2.2 are covered. Learning-performance charts (section 13) remain deferred to Milestone 9.
+- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+  - `QAgent` and `encode_state` are prerequisites (Milestone 7). Charts L1–L4 and `hyperparameter_signals.csv` depend on training output and are deferred to Milestone 9 so this milestone ships a working trainer first.
+- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+  - `training.py` ≈ 200 lines, `train.py` ≈ 80 lines, `test_training.py` ≈ 60 lines — all within 500-line limit.
+- [ ] Define convenient feature flags.
+  - `EVAL_INTERVAL = 500` and `CHECKPOINT_INTERVAL = 1000` module constants in `training.py` (mirrored in `agent_config.json` as `eval_interval` and `checkpoint_interval`); `--learning-plots` CLI flag on `train.py` gated to False until Milestone 9.
+
+### Outputs
+- `src/ai/training.py` — `train` and `evaluate` functions
+- `src/train.py` — CLI entry point (`--games`, `--config`, `--seed`)
+- `models/` — directory created on first run; `trained_agent.npz` + periodic checkpoints written here
+- `output/training_log.jsonl` — per-eval-window log written during training
+- `tests/test_training.py` — training loop tests (req 11.2.2)
+
+### Coding Tasks
+- [ ] 11.1.1 `train(n_games, data, config_path) -> QAgent` in `src/ai/training.py`: create 4 `QAgent` instances sharing one weight vector; run `n_games` self-play; after each game compute rewards (win/loss + optional PP delta) and call `update` for each player's transitions; decay ε linearly
+- [ ] 11.1.2 Store per-game transitions as `(state_vector, action_index, reward, next_state_vector)`; apply updates in reverse chronological order within the game
+- [ ] 11.1.3 Log training metrics every `EVAL_INTERVAL` games: mean total score, win rate vs. random (100 eval games), current ε; write one JSON line to `output/training_log.jsonl` per log event
+- [ ] 11.1.4 Save checkpoint every `CHECKPOINT_INTERVAL` games to `models/checkpoint_{game_num}.npz`; save final model to `models/trained_agent.npz`
+- [ ] 11.1.5 `evaluate(agent, n_games, data) -> dict`: run `n_games` with 1 `QAgent` vs. 3 `RandomAgents`; return `{win_rate, mean_pp, mean_pp_delta_vs_random}`
+- [ ] 11.2.1 `src/train.py`: CLI args `--games` (default 10000), `--config` (default `config/agent_config.json`), `--seed` (optional); call `train()`; print final evaluation summary via `rich`
+- [ ] 11.2.2 Write `tests/test_training.py`: run minimal training loop of 20 games; verify Q-weights differ from initial values; verify `evaluate` returns expected keys with values in valid ranges
+
+#### Code Review Tasks
+- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
+- [ ] Review for duplicated code and try to consolidate and use imports instead
+- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [ ] Check to make sure we have explicit imports and minimal coupling
+
+---
+
+## Milestone 9: Learning Performance Charts
 - **Focus**: Implement Charts L1–L4 (epsilon decay, win-rate vs training, mean score, Q-weight norms) and the `hyperparameter_signals.csv` export in `src/analysis/plots.py` and `src/train.py`. Requires completed Q-training output (`output/training_log.jsonl`, `models/checkpoint_*.npz`). Deferred to Phase 5.
 
 ### Plan Review
