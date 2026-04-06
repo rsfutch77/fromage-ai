@@ -458,6 +458,7 @@ def _apply_milking_parlour_inplace(
 
     # Determine fruit_requirement from the target space and deduct if needed.
     # action.target_venue tells us exactly which venue to look in.
+    _fromagerie_shelf = None
     if action.target_row is not None and action.target_col is not None:
         sp = _get_festival_space(data, action.target_row, action.target_col)
         _deduct_fruit_inplace(player, sp.fruit_requirement)
@@ -472,6 +473,7 @@ def _apply_milking_parlour_inplace(
         if venue == VenueType.FROMAGERIE:
             sp = _get_fromagerie_space(data, action.target_space_id)
             fruit_req = sp.fruit_requirement
+            _fromagerie_shelf = _get_fromagerie_shelf(data, sp.shelf_id)
         elif venue == VenueType.BISTRO:
             sp = _get_bistro_space(data, action.target_space_id)
             fruit_req = sp.fruit_requirement
@@ -491,6 +493,10 @@ def _apply_milking_parlour_inplace(
 
     # No worker is placed for milking parlour actions
     _place_token_inplace(state, player_id, placed, data, ctx, worker_type=None, space_age=None)
+
+    # Apply Fromagerie shelf bonus if the target was a resource-bonus shelf
+    if _fromagerie_shelf is not None and _fromagerie_shelf.column == "resource_bonus":
+        _apply_fromagerie_shelf_bonus(state, player_id, _fromagerie_shelf, data, ctx)
 
 
 def apply_unlock_structure(
