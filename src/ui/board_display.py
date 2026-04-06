@@ -82,6 +82,11 @@ class BoardDisplay:
         self._villes_spaces  = {s.space_id: s for s in data.villes_spaces}
         self._festival_spaces = {(s.row, s.col): s for s in data.festival_spaces}
         self._region_names = [ct.region_name for ct in data.customer_tokens]
+        # win/tie point values per region for the villes table label
+        self._customer_token_values: dict[str, tuple[int, int]] = {
+            ct.region_name: (ct.win_value, ct.tie_value)
+            for ct in data.customer_tokens
+        }
         # parlours[board_id] = list of MilkingParlour sorted by parlour_num
         self._parlours: dict[int, list] = {}
         for p in data.milking_parlours:
@@ -488,11 +493,14 @@ class BoardDisplay:
             ).grid(row=0, column=pid + 1, padx=1)
 
         self._villes_table_cells: dict[str, dict[int, tk.Label]] = {}
+        self._villes_region_labels: dict[str, tk.Label] = {}
         for row_idx, region in enumerate(self._region_names):
-            tk.Label(
-                tbl, text=region[:7], width=7, bg="#ECEFF1",
+            lbl = tk.Label(
+                tbl, text=region, width=11, bg="#ECEFF1",
                 font=("Courier", 7), anchor="w",
-            ).grid(row=row_idx + 1, column=0)
+            )
+            lbl.grid(row=row_idx + 1, column=0)
+            self._villes_region_labels[region] = lbl
             self._villes_table_cells[region] = {}
             for pid in range(4):
                 lbl = tk.Label(
@@ -518,6 +526,26 @@ class BoardDisplay:
             inf = influence[region]
             max_count = max(inf.values())
             leaders = {p for p, c in inf.items() if c == max_count and max_count > 0}
+
+            # Update region label with customer points
+            win_val, tie_val = self._customer_token_values.get(region, (0, 0))
+            rlbl = self._villes_region_labels[region]
+            if not leaders:
+                rlbl.config(text=region, fg="#424242", bg="#ECEFF1", font=("Courier", 7))
+            elif len(leaders) == 1:
+                sole = next(iter(leaders))
+                rlbl.config(
+                    text=f"{region} ({win_val})",
+                    fg=_PLAYER_COLOURS[sole], bg="#ECEFF1",
+                    font=("Courier", 7, "bold"),
+                )
+            else:
+                rlbl.config(
+                    text=f"{region} ({tie_val})",
+                    fg="#757575", bg="#ECEFF1",
+                    font=("Courier", 7),
+                )
+
             for pid, lbl in cells.items():
                 count = inf[pid]
                 if pid in leaders and len(leaders) == 1:
