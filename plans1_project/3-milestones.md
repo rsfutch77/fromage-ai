@@ -275,6 +275,40 @@
 - [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
 - [ ] Define convenient feature flags.
 
+### Learning Performance Charts
+
+These four charts read from the training log produced by `src/ai/training.py`. The training log is a newline-delimited JSON file at `output/training_log.jsonl`, where each line is a dict with the keys below (written once per evaluation window, default every 500 games):
+
+```
+{"game": 500, "epsilon": 0.92, "win_rate": 0.28, "mean_score": 31.4, "std_score": 6.1, "pp_delta": 2.1}
+```
+
+The charts also optionally read checkpoint files at `models/checkpoint_{game}.npz` to compute Q-weight norms.
+
+#### Chart L1 — Epsilon decay curve
+
+- **What**: Line chart of ε (y-axis, 0–1) vs. game number (x-axis). Draws a dashed horizontal line at `epsilon_end` from `agent_config.json`. Annotates the point where ε first reaches `epsilon_end` (if it has), or marks the current ε if training is still in progress.
+- **Data source**: `output/training_log.jsonl` — `game` + `epsilon` fields.
+- **Why useful**: The primary readout for "how close are we to stabilising learning." Once ε reaches its floor the agent is in near-pure exploitation; further games return diminishing exploration benefit. The gap between the current point and the floor is the direct answer to "do we need more samples?"
+
+#### Chart L2 — Win rate vs training progress
+
+- **What**: Line chart of win rate against `RandomAgent` (y-axis, 0–1) vs. game number (x-axis). Draws a dashed horizontal line at 0.25 (random-agent baseline for a 4-player game). Annotates the final win rate.
+- **Data source**: `output/training_log.jsonl` — `game` + `win_rate` fields.
+- **Why useful**: Direct measure of whether the agent is improving. A plateau well above 0.25 indicates convergence; a plateau at or near 0.25 indicates the agent has not learned meaningful strategy and training should be extended or hyperparameters revised.
+
+#### Chart L3 — Mean score over training (with variance band)
+
+- **What**: Line chart of mean total prestige score (y-axis) vs. game number (x-axis), with a shaded ±1 std dev band. Annotates the peak mean score and the game at which it was reached.
+- **Data source**: `output/training_log.jsonl` — `game`, `mean_score`, `std_score` fields.
+- **Why useful**: Tracks absolute score improvement independent of win rate. A narrowing band as training progresses shows the policy is converging; a persistently wide band after ε stabilises suggests the policy has not settled.
+
+#### Chart L4 — Q-weight magnitude over checkpoints
+
+- **What**: Line chart of the L2 norm of the Q-weight vector (y-axis) vs. checkpoint game number (x-axis). Reads all `models/checkpoint_*.npz` files and computes `np.linalg.norm(weights["w"])` for each.
+- **Data source**: `models/checkpoint_{game}.npz` — `w` key (weight vector).
+- **Why useful**: If the norm is still growing or shifting significantly between checkpoints, the Q-function has not converged. A flat line indicates the weights have stabilised, meaning additional training is unlikely to change the learned strategy — the clearest signal for an early-stopping decision.
+
 ### Charts
 
 #### Chart 1 — Structure build frequency by player board
@@ -348,9 +382,71 @@
 - **Data source**: `PlayerState.fruit_spent_on_fruited`, `PlayerState.fruit_spent_on_jam`, winner status.
 - **Why useful**: `score_fruit = fruited_spent × jam_spent` is multiplicative — imbalanced spending is actively punished. If winning points cluster near the diagonal and losing points cluster off-axis, this is direct, non-obvious advice to a player: balance your fruit spending.
 
+### Analysis Exports
+
+Two structured files are written alongside the charts so that a downstream agent can consume results without re-reading PNGs.
+
+#### `output/hyperparameter_signals.csv`
+
+Written by `src/train.py` after learning charts are generated. Each row is one named signal extracted from the training logs and checkpoints. A tuning agent reads this file and recommends `agent_config.json` changes.
+
+Schema: `signal, value, unit, threshold, status, recommendation`
+
+| signal | what it captures |
+|--------|-----------------|
+| `epsilon_final` | ε at the last logged game |
+| `epsilon_floor` | `epsilon_end` from config |
+| `games_to_epsilon_floor` | game number when ε first reached `epsilon_end`, or `null` if not yet reached |
+| `win_rate_final` | win rate vs RandomAgent at last eval |
+| `win_rate_peak` | highest win rate recorded across all evals |
+| `win_rate_plateau_game` | game number at which win rate stopped improving (< 0.5% gain over last 3 evals) |
+| `score_mean_final` | mean score at last eval |
+| `score_std_final` | std dev of score at last eval |
+| `score_std_trend` | slope of std dev over last 5 evals (negative = converging) |
+| `weight_norm_final` | L2 norm of weight vector at last checkpoint |
+| `weight_norm_delta` | change in norm between the last two checkpoints |
+
+`status` is one of `OK`, `WARN`, `CRIT`. `recommendation` is a short machine-readable string, e.g. `increase_epsilon_decay_games`, `reduce_alpha`, `run_more_games`, `ok`.
+
+#### `output/strategy_summary.md`
+
+Written by `src/analyze.py` after game-analysis charts are generated. Contains one structured finding per chart, in a consistent format a summarisation agent can render into prose or a player guide.
+
+Each finding block uses this format:
+
+```
+## Finding: <short title>
+source_chart: <chart number and name>
+confidence: high | medium | low   # high = clear signal, low = noisy data
+key_metric: <value with units>
+winner_vs_loser_delta: <value, if applicable>
+finding: <one sentence, declarative, no hedging>
+implication: <one sentence — what a player or the AI should do differently>
+```
+
+Findings to generate (one per chart that yields a clear signal):
+
+- Chart 1: which structure on each board is most commonly unlocked (mode per board)
+- Chart 2: which venue contributes the most average points (argmax)
+- Chart 3: whether any board's win rate deviates from 0.25 by more than 0.05 (balance flag)
+- Chart 4: whether fruited or jam usage is higher (ratio)
+- Chart 5: mean orders-as-share-of-score (is it worth pursuing?)
+- Chart 6: mean unused-resource penalty magnitude
+- Chart 7: which scoring category shows the largest winner/loser divergence (argmax of delta)
+- Chart 8: highest and lowest board×venue mean score cells (best and worst synergy)
+- Chart 9: whether Gold cheese age placement correlates with winning (winner mean Gold count vs loser)
+- Chart 10: which structure slot most differentiates winners from losers on each board
+- Chart 11: which board achieves the highest mean HQ score, and whether winners achieve significantly more
+- Chart 12: parlour usage count at peak win rate (optimal parlour target)
+- Chart 13: highest win-rate Villes region (best region to contest)
+- Chart 14: whether winner fruit spending clusters near the `y = x` diagonal more than losers
+
 ### Outputs
 - `src/analysis/stats.py` — add 14 plot-producing methods to `BaselineStats` (or a new `PlotStats` class if `stats.py` is too large)
-- `src/analyze.py` — add `--plots` CLI flag; when set, generate and save all 14 charts as PNG files to an `output/` directory
+- `src/analysis/plots.py` — 4 learning-performance chart functions (L1–L4); reads `output/training_log.jsonl` and `models/checkpoint_*.npz`
+- `src/analysis/exports.py` — `write_hyperparameter_signals(log_path, models_dir, config_path, out_path)` and `write_strategy_summary(db, out_path)`
+- `src/analyze.py` — add `--plots` CLI flag; when set, generate and save all 14 charts and `strategy_summary.md` to `output/`
+- `src/train.py` — add `--learning-plots` CLI flag; when set, generate 4 learning charts and `hyperparameter_signals.csv` to `output/`
 
 ### Coding Tasks
 - [ ] Ensure `ResultsDB` stores per-player `structures_unlocked`, `board_id`, all `ScoreBreakdown` fields, `fruit_spent_on_fruited`, `fruit_spent_on_jam`, `milking_parlours_used`, per-player `PlacedCheese` age counts, `villes_customer_token_holders`, and `winner_id` per game (add columns to schema if Milestone 5 did not already include them)
@@ -369,6 +465,21 @@
 - [ ] Implement `plot_villes_region_control(db: ResultsDB, out_path: Path) -> None`
 - [ ] Implement `plot_fruit_balance_scatter(db: ResultsDB, out_path: Path) -> None`
 - [ ] Wire all fourteen under `--plots` flag in `src/analyze.py`; save to `output/<chart_name>.png`
+- [ ] Implement `plot_epsilon_decay(log_path: Path, config_path: Path, out_path: Path) -> None` — Chart L1
+- [ ] Implement `plot_win_rate_progress(log_path: Path, out_path: Path) -> None` — Chart L2
+- [ ] Implement `plot_score_progress(log_path: Path, out_path: Path) -> None` — Chart L3
+- [ ] Implement `plot_weight_magnitude(models_dir: Path, out_path: Path) -> None` — Chart L4
+- [ ] Wire the four learning charts under `--learning-plots` flag in `src/train.py`; save to `output/learning_<chart_name>.png`
+- [ ] Implement `write_hyperparameter_signals(log_path: Path, models_dir: Path, config_path: Path, out_path: Path) -> None` in `src/analysis/exports.py`: compute all 11 signals from the training log and checkpoints; write `output/hyperparameter_signals.csv`; set `status` and `recommendation` per the thresholds below:
+  - `epsilon_final > epsilon_floor + 0.01` → WARN, `run_more_games`
+  - `win_rate_final < 0.30` → CRIT, `extend_training_or_revise_rewards`
+  - `win_rate_final >= 0.30 and win_rate_final < 0.40` → WARN, `consider_more_games`
+  - `score_std_trend > 0` (std dev rising) → WARN, `reduce_alpha`
+  - `weight_norm_delta / weight_norm_final > 0.01` (still shifting > 1% per checkpoint) → WARN, `run_more_games`
+  - all else → OK
+- [ ] Implement `write_strategy_summary(db: ResultsDB, out_path: Path) -> None` in `src/analysis/exports.py`: compute one finding block per chart (14 total) using the schema above; write `output/strategy_summary.md`
+- [ ] Wire `write_hyperparameter_signals` into `--learning-plots` path in `src/train.py`
+- [ ] Wire `write_strategy_summary` into `--plots` path in `src/analyze.py`
 
 #### Code Review Tasks
 - [ ] Review if you made any files that are too long, try to keep them below around 500 lines
