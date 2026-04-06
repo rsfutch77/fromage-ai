@@ -672,7 +672,7 @@ class BoardDisplay:
         for player in state.players:
             pid = player.player_id
             res_parts = [f"{_res[r.name]}:{v}" for r, v in player.resources.items()
-                         if r.name in _res]
+                         if r.name in _res and r.name != "FRUIT"]
             fruit_stock = next((v for r, v in player.resources.items() if r.name == "FRUIT"), 0)
             fruit_str = (
                 f"  Fruit: {fruit_stock} stock  "
