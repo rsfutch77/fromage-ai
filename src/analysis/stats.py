@@ -76,8 +76,8 @@ class BaselineStats:
     def _compute(self) -> None:
         n_games = len(self._results)
 
-        # Win counts per board id (player_id == board_id in default setup)
-        wins: dict[int, int] = {i: 0 for i in range(4)}
+        # Win counts per board id (1-indexed, matching player_board_structures.csv)
+        wins: dict[int, int] = {i: 0 for i in range(1, 5)}
         category_sums: dict[str, float] = {c: 0.0 for c in _CATEGORIES}
         totals: list[float] = []
 
@@ -91,10 +91,12 @@ class BaselineStats:
 
         for result in self._results:
             winner_set = set(result.winner_ids)
+            pid_to_board = {p.player_id: p.board_id for p in result.final_state.players}
             for sb in result.scores:
                 pid = sb.player_id
                 if pid in winner_set:
-                    wins[pid] = wins.get(pid, 0) + 1
+                    bid = pid_to_board[pid]
+                    wins[bid] = wins.get(bid, 0) + 1
                 for cat in _CATEGORIES:
                     category_sums[cat] += getattr(sb, cat)
                 totals.append(float(sb.total))
@@ -117,7 +119,7 @@ class BaselineStats:
         n_player_games = len(totals)  # == n_games * 4
 
         self.win_rate_by_board: dict[int, float] = {
-            pid: wins[pid] / n_games for pid in range(4)
+            bid: wins[bid] / n_games for bid in range(1, 5)
         }
         self.mean_score_by_category: dict[str, float] = {
             cat: category_sums[cat] / n_player_games for cat in _CATEGORIES
@@ -160,8 +162,8 @@ class BaselineStats:
         win_table = Table(title="Win Rate by Board Position", show_lines=False)
         win_table.add_column("Board", justify="right")
         win_table.add_column("Win Rate", justify="right")
-        for pid in range(4):
-            win_table.add_row(str(pid), f"{self.win_rate_by_board[pid]:.3f}")
+        for bid in sorted(self.win_rate_by_board):
+            win_table.add_row(str(bid), f"{self.win_rate_by_board[bid]:.3f}")
         console.print(win_table)
 
         # --- Mean scores by category ---
