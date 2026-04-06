@@ -106,8 +106,7 @@ class TurnAction:
     """The complete plan for one player's turn.
 
     Any field may be None/empty to skip that sub-action.
-    make_cheese may contain up to one action per available worker type so a
-    player can place all their in-hand workers on cheese spaces in one turn.
+    make_cheese may contain at most one MakeCheeseAction per turn (one cheese placement per turn).
     """
     gather: GatherAction | None = None
     make_cheese: list[MakeCheeseAction] = field(default_factory=list)
@@ -609,7 +608,7 @@ def all_legal_turn_actions(
         extra_fruit = (gc.resource_space.turns if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
         all_cheese = legal_make_cheese_actions(state, player_id, data, extra_fruit)
         cheese_combos = _legal_cheese_combos(
-            available_for_cheese, all_cheese, player.cheese_tokens_remaining
+            available_for_cheese, all_cheese, min(1, player.cheese_tokens_remaining)
         )
 
         for combo in cheese_combos:

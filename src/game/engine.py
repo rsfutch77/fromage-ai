@@ -530,6 +530,11 @@ def apply_turn(
     Order: gather → unlock → make-cheese → milking parlours.
     (Gather first so resources from gathering are available for unlock costs.)
     """
+    if len(action.make_cheese) > 1:
+        raise IllegalActionError(
+            f"Player {player_id} attempted {len(action.make_cheese)} make-cheese actions; only 1 is allowed per turn"
+        )
+
     new = copy.deepcopy(state)
     ctx = _TurnCtx()
 
