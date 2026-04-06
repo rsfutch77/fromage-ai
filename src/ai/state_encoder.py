@@ -185,6 +185,11 @@ Per-venue approach:
                 spend on jam     → delta = fruit_count (current fruited total)
               This naturally rewards balance — the agent earns more for whichever
               type it has less of, incentivizing an even mix automatically.
+              Zero-count boundary: if either count is 0 the score is 0, so the
+              delta is also 0 — the agent correctly receives NO reward for jam
+              placements while it has zero fruited (and vice versa). Do NOT add
+              a minimum-value floor or partial credit here; both types must be
+              non-zero before any fruit points are earned.
               Caveat: early game both counts are near zero so fruit spends look
               nearly worthless by the delta; the agent may undervalue fruit access
               in early turns. Watch for this during training evaluation.
