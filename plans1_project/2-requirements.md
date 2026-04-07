@@ -198,15 +198,15 @@
     [x] 9.1.6 Document the total vector length as a module constant `STATE_VECTOR_SIZE` and add an assertion in `encode_state` that the output length equals `STATE_VECTOR_SIZE`.
     [x] 9.1.7 Write `tests/test_state_encoder.py`: verify `encode_state` returns a vector of length `STATE_VECTOR_SIZE`; verify all values are in range [0, 1] (or known fixed range); verify output is deterministic for the same state.
 
-[ ] 9.2 Enhanced State Encoder (Milestone 10 — trigger after 10 000 training games if win rate plateaus below 0.35)
-  [ ] 9.2.1 Venue/resource lookahead sub-vector (28 features): one-hot(4) for venue at rotation+0..+3; one-hot(4) for resource at rotation+0..+2.
-  [ ] 9.2.2 Worker turns-until-available sub-vector (12 features): for each of 3 cheese types, one-hot(4) where index = turns until the worker is back in hand.
-  [ ] 9.2.3 Festival derived sub-vector: `score_festival` result (normalised), top-3 connected group sizes (normalised by 7), count of empty adjacent spaces (normalised).
-  [ ] 9.2.4 Fromagerie derived sub-vector: own distinct shelves occupied (normalised by 6), shelves still available (normalised by 6), each opponent's shelf count (3 values), count of unoccupied point-bonus spaces available (normalised).
-  [ ] 9.2.5 Bistro derived sub-vector: own pairings (normalised by 9), own half-tables (normalised by 9), own Bronze/Silver/Gold token counts (normalised by 9 each), each opponent's pairings (3 values).
-  [ ] 9.2.6 Villes derived sub-vector: per region (6 regions) — self influence (normalised), max-opponent influence (normalised), delta (self − max_opp, normalised), winner status one-hot(3) = 36 features total.
-  [ ] 9.2.7 Update `STATE_VECTOR_SIZE`; update assertion in `encode_state`; update `_FEATURE_SIZE` in `q_agent.py`; document that saved models trained on the old vector size are incompatible and must be retrained.
-  [ ] 9.2.8 Update `tests/test_state_encoder.py`: verify new vector length; verify scoring-derived features are non-zero for a state with known placements; verify lookahead features match expected rotation offsets.
+[x] 9.2 Enhanced State Encoder (Milestone 10 — trigger after 10 000 training games if win rate plateaus below 0.35)
+  [x] 9.2.1 Venue/resource lookahead sub-vector (28 features): one-hot(4) for venue at rotation+0..+3; one-hot(4) for resource at rotation+0..+2.
+  [x] 9.2.2 Worker turns-until-available sub-vector (12 features): for each of 3 cheese types, one-hot(4) where index = turns until the worker is back in hand.
+  [x] 9.2.3 Festival derived sub-vector: `score_festival` result (normalised), top-3 connected group sizes (normalised by 7), count of empty adjacent spaces (normalised).
+  [x] 9.2.4 Fromagerie derived sub-vector: own distinct shelves occupied (normalised by 6), shelves still available (normalised by 6), each opponent's shelf count (3 values), count of unoccupied point-bonus spaces available (normalised).
+  [x] 9.2.5 Bistro derived sub-vector: own pairings (normalised by 9), own half-tables (normalised by 9), own Bronze/Silver/Gold token counts (normalised by 9 each), each opponent's pairings (3 values).
+  [x] 9.2.6 Villes derived sub-vector: per region (6 regions) — self influence (normalised), max-opponent influence (normalised), delta (self − max_opp, normalised), winner status one-hot(3) = 36 features total.
+  [x] 9.2.7 Update `STATE_VECTOR_SIZE`; update assertion in `encode_state`; update `_FEATURE_SIZE` in `q_agent.py`; document that saved models trained on the old vector size are incompatible and must be retrained.
+  [x] 9.2.8 Update `tests/test_state_encoder.py`: verify new vector length; verify scoring-derived features are non-zero for a state with known placements; verify lookahead features match expected rotation offsets.
 
 ---
 

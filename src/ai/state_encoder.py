@@ -2,244 +2,26 @@
 
 Used as input to the Q-learning agent's linear function approximator.
 Exports STATE_VECTOR_SIZE constant and encode_state() function.
-
 See requirements section 9.
 
-Enhanced state encoder design  [ASPIRATIONAL — see Milestone 10: Enhanced State Encoder]
-------------------------------
-The features below are NOT in the current encoder (STATE_VECTOR_SIZE = 197).
-They are planned for a future milestone. The current encoder uses raw occupancy
-binary flags which are insufficient for a linear approximator to learn scoring
-structure (e.g. festival connected components, fromagerie shelf rubric jumps).
+Sub-vector layout (enhanced=True, total 292):
+  Own-player (18) | Board (12) | Occupancy (158) | Opponents (9)
+  | Venue lookahead (16) | Resource lookahead (12) | Worker avail (12)
+  | Festival derived (5) | Fromagerie derived (6) | Bistro derived (8)
+  | Villes derived (36)
 
-Venue / resource lookahead:
-  Because board rotation is fully deterministic, future venues and resources are
-  perfectly predictable — encode them directly to enable multi-turn lookahead:
-    Self venue lookahead: one-hot(4) for venues at rotation+0, +1, +2, +3.
-    Self resource lookahead: one-hot(4) for resources at rotation+0, +1, +2.
-    Self workers: for each cheese type (Soft/Hard/Bleu), encode turns-until-
-      available as one-hot(4) where 0=in hand now, 1/2/3=returns next/2nd/3rd
-      rotation. Paired with the venue lookahead this lets the agent plan which
-      worker types to reserve for upcoming turns.
-
-Scoring-driven features (critical for the agent to learn value correctly):
-  These are not derivable from raw positions by a linear approximator — they
-  must be pre-computed and included explicitly.
-
-  Festival (score_festival uses BFS connected components):
-    A raw grid of occupied spaces is insufficient — linear function
-    approximation cannot learn to count orthogonal connected components from
-    individual space flags. Pre-compute and encode:
-      - Current festival score for this player (call score_festival directly)
-      - Size of each connected group the player participates in (sorted desc,
-        e.g. top 3 group sizes) — tells the agent how close groups are to
-        the size-7 bonus threshold
-      - Count of empty festival spaces orthogonally adjacent to the player's
-        existing groups — marginal expansion value per additional placement
-    Free-sample spaces always participate in adjacency (already handled by
-    score_festival), so their positions should be treated as occupied when
-    computing adjacency counts.
-
-  Fromagerie (score_fromagerie uses distinct-shelf rubric):
-    The rubric gives increasing points for occupying more distinct shelves, so
-    the marginal value of a new shelf depends on how many you already have.
-    Encode:
-      - Count of distinct shelves currently occupied by this player
-      - Count of distinct shelves still available (have at least one empty space)
-      - Opponents' distinct shelf counts (competition for the same spaces)
-    Fromagerie shelf bonus awareness — action encoding vs. state encoding:
-      Point-bonus shelves (shelf.column == "point_bonus", gives points_per_token
-      at end-game) do NOT naturally encode themselves: the agent can't distinguish
-      a high-value space from a regular one unless the information is explicit.
-      Resource-bonus shelves (gain_1_resource_any, gain_2_diff_resources, etc.)
-      are partially self-encoding because the agent sees the resource gain in the
-      next state, but credit assignment is cleaner if flagged explicitly.
-      The shelf bonus info belongs primarily in the ACTION encoding (Q(s,a) gets
-      features describing the target space's shelf type and bonus magnitude), not
-      the state vector. However, the state should include a summary:
-      - Count of unoccupied point-bonus fromagerie spaces still available to this
-        player (useful for planning future placements)
-
-  Bistro (score_bistro uses pairings = tables with ≥2 player tokens):
-    The scoring row depends on total pairings, and per-token points scale by
-    age tier, so both pairing count and age mix matter.
-    Encode:
-      - Current pairings count (tables where player has ≥2 tokens)
-      - Tables where player has exactly 1 token (potential pairing candidates)
-      - Age distribution of player's bistro tokens (Bronze/Silver/Gold counts)
-      - Whether opponents have already paired a table (blocking info)
-
-  Villes (score_villes awards per-region customer tokens):
-    Points are winner-takes-most per region; a tie gives only the tie_value.
-    The agent needs to know whether it's dominating, tied, or trailing each
-    region to evaluate the marginal value of adding another villes token.
-    Encode per region:
-      - Self influence count in the region
-      - Max opponent influence count in the region
-      - Delta (self − max_opponent): positive = leading, negative = trailing
-      - Current winner (self/tied/opponent) as a 3-way one-hot
-
-Suggested full vector layout (~129 base features + scoring-derived features):
-  Global (7):        rotation one-hot(4), turn/60, game_end, deck_size/36
-  Venue look (16):   offsets 0–3 × one-hot(4)
-  Resource look (12): offsets 0–2 × one-hot(4)
-  Workers (12):      3 types × turns-until-available one-hot(4)
-  Self resources (4): fruit, livestock, structure, order_count
-  Self status (21):  tokens_remaining, structures×4, parlours×4,
-                     order_cards 3×3 grid, orders_completed, fruit_spent×2
-  Opponents (3×16=48): per opp — tokens, venue, resources×4,
-                        workers_now×3, workers_next_turn×3, orders_completed
-  Board (9):         own/opp cheese per venue×4, villes regions held
-  Festival derived:  current score, top-3 group sizes, adjacent empty count
-  Fromagerie derived: own shelf count, available shelf count, opp shelf counts×3
-  Bistro derived:    pairings, half-tables, age counts×3, opp pairings×3
-  Villes derived:    per region × (self_inf, max_opp_inf, delta, status one-hot(3))
-
-Reward shaping design  [IMPLEMENTED in src/ai/training.py]
-----------------------
-Terminal reward (last transition per player):
-    terminal_reward = score_total + tokens_placed / 16
-
-  tokens_placed = 15 − cheese_tokens_remaining, so the fractional bonus is
-  in [0, 0.9375) — always less than 1 point. Score differences always dominate;
-  token deployment only distinguishes tied scores. The agent therefore learns
-  both objectives in the correct priority order: maximise score first, maximise
-  cheese placed second.
-
-  Using the raw score (not a win/loss binary) preserves cardinal information —
-  a binary signal collapses a 45-point game and a 12-point game into the same
-  reward. The /16 tiebreaker makes the tiebreaker rule trainable rather than
-  a post-hoc evaluation label; the agent will develop a preference for deploying
-  all its tokens even when it cannot improve its score.
-
-  Win/loss labels for evaluation statistics still use scoring.winner(), which
-  applies the same tiebreaker logic (most tokens placed, then shared victory).
-
-Intermediate rewards (all other transitions) use potential-based shaping:
-
-  r(s, a, s') = partial_score(s') - partial_score(s)
-
-This is provably policy-invariant (Ng et al. 1999) — it accelerates learning
-without changing what the optimal policy is. All scoring functions are already
-implemented in scoring.py and called after each placement.
-
-Per-venue approach:
-  Festival:   BFS score delta after placement. Non-linear (the 6→7 group-size
-              jump is especially valuable) — marginal delta captures this well.
-  Fromagerie: Full fromagerie score delta: rubric[new_shelf_count] −
-              rubric[old_shelf_count] plus immediate points_per_token credit
-              for point-bonus shelf placements. Both effects are captured by
-              calling score_fromagerie on pre/post states.
-  Bistro:     Full bistro score delta (pairing count × age-weighted row)
-              after each placement. Captures both new pairings and age mix.
-  Villes:     Reward at terminal only. Region leads flip mid-game, so
-              intermediate villes rewards add noise rather than signal.
-              Include villes influence deltas in the state features instead.
-  Orders:     Rewarded immediately via score_orders delta when an order is
-              completed (engine.py already detects completion on placement).
-  Emergent strategies (no explicit shaping needed):
-              Venue focus and order timing should emerge naturally from marginal
-              delta rewards without explicit encoding.
-              Venue focus: Festival/Fromagerie/Bistro/Villes scoring functions
-              all have increasing returns for concentration (superlinear group
-              sizes, rubric jumps, pairing rows, region dominance). The agent
-              learns that extending an existing group beats scattering to a new
-              venue because the marginal delta is higher. The rotation mechanic
-              also limits true multi-venue spreading — you can only place at the
-              facing venue, so focus is partially enforced by the game structure.
-              Order timing: orders complete automatically on a matching placement;
-              the agent is really choosing which space to place at. A better shelf
-              or group extension will show a higher score delta than the order-
-              completing space, and the agent learns the tradeoff through the
-              combined reward. No separate "don't rush orders" signal needed.
-              Both patterns are medium-horizon (several turns), so they depend on
-              a high discount factor (γ ≈ 0.97–0.99) and sufficient training
-              volume rather than reward shaping.
-  Negative rewards:
-              Avoid a direct penalty for "3 workers available simultaneously."
-              The opportunity cost is already implicit — a turn with 3 workers
-              in hand produces at most 2 workers' worth of reward, which is
-              weaker than a turn where the agent had pre-staged workers well.
-              A blanket negative also punishes unavoidable situations (game
-              start, forced alignment) and fires at the wrong moment (the bad
-              decision was the deployment 1–3 rotations earlier).
-              Instead, if staggering fails to emerge naturally from training,
-              reward the positive signal: turns where the agent uses BOTH a
-              gather worker AND a make-cheese worker (efficient 2-worker turns).
-              This rewards the behaviour without punishing unavoidable states.
-  Structures: Do NOT shape structure unlock rewards directly. Structures are
-              multipliers on future actions, not direct score contributors (except
-              HQ). Their value is captured transitively: Barn/Loading Dock/
-              Greenhouse give resources, and the agent is already rewarded for
-              what it does with those resources downstream. Rewarding the unlock
-              itself would be double-counting at an unpredictable rate that varies
-              by board and turns remaining.
-              HQ is the exception — it is a direct end-game scorer and belongs
-              in the terminal reward only.
-              The state features carry the structural signal: structures_unlocked×4
-              lets the Q-function learn that "Barn unlocked" is a valuable state.
-              Add to the state vector: Structure token cost to unlock each remaining
-              slot (from player_board_structures.structure_costs), so the agent can
-              weigh unlock spending against other uses of Structure tokens.
-  Fruit:      Multiplicative scoring (fruit_spent_on_fruited × fruit_spent_on_jam)
-              means the marginal delta approach works cleanly without special logic:
-                spend on fruited → delta = jam_count  (current jam total)
-                spend on jam     → delta = fruit_count (current fruited total)
-              This naturally rewards balance — the agent earns more for whichever
-              type it has less of, incentivizing an even mix automatically.
-              Zero-count boundary: if either count is 0 the score is 0, so the
-              delta is also 0 — the agent correctly receives NO reward for jam
-              placements while it has zero fruited (and vice versa). Do NOT add
-              a minimum-value floor or partial credit here; both types must be
-              non-zero before any fruit points are earned.
-              Caveat: early game both counts are near zero so fruit spends look
-              nearly worthless by the delta; the agent may undervalue fruit access
-              in early turns. Watch for this during training evaluation.
-
-Current sub-vector layout (implemented)
------------------------------------------
-Sub-vector layout
------------------
-Own-player (18):
-  resources × 4 (FRUIT, LIVESTOCK, STRUCTURE, ORDER — normalised by 10)
-  workers in hand × 3 binary (SOFT, HARD, BLEU)
-  cheese_tokens_remaining (normalised by 15)
-  structures_unlocked fraction (sum / 4)
-  orders_completed (normalised by 6, clamped)
-  orders_held (normalised by 6, clamped)
-  fruit_spent_on_fruited (normalised by 15)
-  fruit_spent_on_jam (normalised by 15)
-  milking_parlours_used total (normalised by 4)
-  board_id one-hot × 4
-
-Board state (12):
-  rotation_index one-hot × 4
-  resource_facing one-hot × 4  (LIVESTOCK, ORDER, STRUCTURE, FRUIT)
-  venue_facing one-hot × 4     (FROMAGERIE, BISTRO, VILLES, FESTIVAL)
-
-Venue occupancy (158):
-  For each of 79 spaces in canonical order: [own_token, any_token]
-  Fromagerie 18 spaces × 2 = 36
-  Bistro 18 spaces × 2 = 36
-  Villes 18 spaces × 2 = 36
-  Festival 25 spaces × 2 = 50  (FREE_SAMPLE spaces: own=0, any=1 always)
-
-Opponent summary (9):
-  Per opponent (3, ordered by player_id excluding self):
-    cheese_tokens_remaining / 15
-    orders_completed (normalised by 6, clamped)
-    total cheese placed / 15 (clamped)
-
-Total: 18 + 12 + 158 + 9 = 197
+Legacy mode (enhanced=False): first 197 features only (base encoder).
 """
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from src.game.types import (
+    AgeType,
     CheeseType,
     ResourceType,
     SpaceType,
@@ -253,7 +35,9 @@ if TYPE_CHECKING:
     from src.game.data_loader import GameDataLoader
     from src.game.state import GameState
 
-# Sub-vector sizes (must sum to STATE_VECTOR_SIZE)
+# ---------------------------------------------------------------------------
+# Sub-vector sizes
+# ---------------------------------------------------------------------------
 _OWN_SIZE = 18
 _BOARD_SIZE = 12
 _FROMAGERIE_SPACES = 18
@@ -263,26 +47,73 @@ _FESTIVAL_SPACES = 25
 _OCCUPANCY_SIZE = (_FROMAGERIE_SPACES + _BISTRO_SPACES + _VILLES_SPACES + _FESTIVAL_SPACES) * 2
 _OPPONENT_SIZE = 9
 
-STATE_VECTOR_SIZE: int = _OWN_SIZE + _BOARD_SIZE + _OCCUPANCY_SIZE + _OPPONENT_SIZE  # 197
+_BASE_SIZE: int = _OWN_SIZE + _BOARD_SIZE + _OCCUPANCY_SIZE + _OPPONENT_SIZE  # 197
+
+_VENUE_LOOK_SIZE = 16   # 4 offsets × one-hot(4)
+_RESOURCE_LOOK_SIZE = 12  # 3 offsets × one-hot(4)
+_WORKER_AVAIL_SIZE = 12  # 3 types × one-hot(4)
+_FESTIVAL_DERIVED_SIZE = 5
+_FROMAGERIE_DERIVED_SIZE = 6
+_BISTRO_DERIVED_SIZE = 8
+_VILLES_DERIVED_SIZE = 36  # 6 regions × 6 features
+
+_ENHANCED_SIZE: int = (
+    _VENUE_LOOK_SIZE + _RESOURCE_LOOK_SIZE + _WORKER_AVAIL_SIZE
+    + _FESTIVAL_DERIVED_SIZE + _FROMAGERIE_DERIVED_SIZE
+    + _BISTRO_DERIVED_SIZE + _VILLES_DERIVED_SIZE
+)  # 95
+
+STATE_VECTOR_SIZE: int = _BASE_SIZE + _ENHANCED_SIZE  # 292
+
+# Normalisation constants
+_FESTIVAL_SCORE_NORM = 30.0
+_FESTIVAL_ADJ_NORM = 12.0
+_INFLUENCE_NORM = 6.0
+
+# Canonical region order for Villes (matches customer_tokens.csv order)
+_REGION_ORDER: list[str] = ["purple", "blue", "green", "white", "yellow", "pink"]
 
 
-def encode_state(state: GameState, player_id: int, data: GameDataLoader) -> np.ndarray:
+def encode_state(
+    state: GameState,
+    player_id: int,
+    data: GameDataLoader,
+    *,
+    enhanced: bool = True,
+) -> np.ndarray:
     """Encode *state* from *player_id*'s perspective.
 
-    Returns a float32 array of length STATE_VECTOR_SIZE with all values in [0, 1].
+    Returns a float32 array of length STATE_VECTOR_SIZE (292 when enhanced,
+    197 when not) with all values in [0, 1].
+
+    Set *enhanced* = False to get the legacy 197-feature vector (for loading
+    old saved models).
     """
-    vec = np.concatenate([
+    parts = [
         _encode_own_player(state, player_id),
         _encode_board(state, player_id),
         _encode_occupancy(state, player_id, data),
         _encode_opponents(state, player_id),
-    ]).astype(np.float32)
-    assert len(vec) == STATE_VECTOR_SIZE, f"Expected {STATE_VECTOR_SIZE}, got {len(vec)}"
+    ]
+    if enhanced:
+        parts.extend([
+            _encode_venue_lookahead(state, player_id),
+            _encode_resource_lookahead(state, player_id),
+            _encode_worker_availability(state, player_id),
+            _encode_festival_derived(state, player_id, data),
+            _encode_fromagerie_derived(state, player_id, data),
+            _encode_bistro_derived(state, player_id, data),
+            _encode_villes_derived(state, player_id, data),
+        ])
+
+    vec = np.concatenate(parts).astype(np.float32)
+    expected = STATE_VECTOR_SIZE if enhanced else _BASE_SIZE
+    assert len(vec) == expected, f"Expected {expected}, got {len(vec)}"
     return vec
 
 
 # ---------------------------------------------------------------------------
-# Sub-vector encoders
+# Base sub-vector encoders (unchanged from Milestone 8)
 # ---------------------------------------------------------------------------
 
 def _encode_own_player(state: GameState, player_id: int) -> np.ndarray:
@@ -356,25 +187,21 @@ def _encode_occupancy(state: GameState, player_id: int, data: GameDataLoader) ->
 
     parts: list[np.ndarray] = []
 
-    # Fromagerie — sorted by space_id
     for sp in sorted(data.fromagerie_spaces, key=lambda s: s.space_id):
         key = (VenueType.FROMAGERIE, sp.space_id)
         parts.append(np.array([1.0 if key in own_set else 0.0,
                                 1.0 if key in any_set else 0.0]))
 
-    # Bistro — sorted by space_id
     for sp in sorted(data.bistro_spaces, key=lambda s: s.space_id):
         key = (VenueType.BISTRO, sp.space_id)
         parts.append(np.array([1.0 if key in own_set else 0.0,
                                 1.0 if key in any_set else 0.0]))
 
-    # Villes — sorted by space_id
     for sp in sorted(data.villes_spaces, key=lambda s: s.space_id):
         key = (VenueType.VILLES, sp.space_id)
         parts.append(np.array([1.0 if key in own_set else 0.0,
                                 1.0 if key in any_set else 0.0]))
 
-    # Festival — sorted by (row, col); FREE_SAMPLE always any=1, own=0
     for sp in sorted(data.festival_spaces, key=lambda s: (s.row, s.col)):
         key = (VenueType.FESTIVAL, sp.row, sp.col)
         if sp.space_type == SpaceType.FREE_SAMPLE:
@@ -396,3 +223,292 @@ def _encode_opponents(state: GameState, player_id: int) -> np.ndarray:
         parts.append(min(len(opp.orders_completed) / 6.0, 1.0))
         parts.append(min(len(opp.cheese_tokens_on_board) / 15.0, 1.0))
     return np.array(parts, dtype=np.float64)
+
+
+# ---------------------------------------------------------------------------
+# Enhanced sub-vector encoders (Milestone 10)
+# ---------------------------------------------------------------------------
+
+def _encode_venue_lookahead(state: GameState, player_id: int) -> np.ndarray:
+    """Venue at rotation+0..+3 as one-hot(4) each (16 values)."""
+    parts = np.zeros(16)
+    for offset in range(4):
+        idx = (player_id + state.rotation_index + offset) % 4
+        parts[offset * 4 + idx] = 1.0
+    return parts
+
+
+def _encode_resource_lookahead(state: GameState, player_id: int) -> np.ndarray:
+    """Resource at rotation+0..+2 as one-hot(4) each (12 values)."""
+    parts = np.zeros(12)
+    for offset in range(3):
+        idx = (player_id + state.resource_tile_orientation + state.rotation_index + offset) % 4
+        parts[offset * 4 + idx] = 1.0
+    return parts
+
+
+def _encode_worker_availability(state: GameState, player_id: int) -> np.ndarray:
+    """Turns-until-available for each cheese type as one-hot(4) (12 values).
+
+    Index 0 = in hand now, 1/2/3 = returns in 1/2/3 rotations.
+    """
+    player = state.players[player_id]
+    parts = np.zeros(12)
+    for i, ctype in enumerate([CheeseType.SOFT, CheeseType.HARD, CheeseType.BLEU]):
+        worker = next((w for w in player.workers if w.cheese_type == ctype), None)
+        if worker is None or worker.location == WorkerLocation.IN_HAND:
+            turns = 0
+        elif worker.return_after_rotation is not None:
+            turns = (worker.return_after_rotation - state.rotation_index) % 4
+            if turns == 0:
+                turns = 0  # due back this rotation = available now
+        else:
+            turns = 0
+        parts[i * 4 + min(turns, 3)] = 1.0
+    return parts
+
+
+def _encode_festival_derived(
+    state: GameState, player_id: int, data: GameDataLoader,
+) -> np.ndarray:
+    """Festival scoring-derived features (5 values).
+
+    [score_norm, group1_size/7, group2_size/7, group3_size/7, adj_empty_norm]
+    """
+    all_placed = [pc for p in state.players for pc in p.cheese_tokens_on_board]
+
+    # Player's festival positions
+    player_positions: set[tuple[int, int]] = {
+        (pc.row, pc.col)
+        for pc in all_placed
+        if pc.venue == VenueType.FESTIVAL and pc.player_id == player_id
+    }
+    free_sample_positions: set[tuple[int, int]] = {
+        (sp.row, sp.col)
+        for sp in data.festival_spaces
+        if sp.space_type == SpaceType.FREE_SAMPLE
+    }
+    own_occupied = player_positions | free_sample_positions
+
+    if not player_positions:
+        return np.zeros(5)
+
+    # BFS for connected groups (same logic as scoring.score_festival)
+    visited: set[tuple[int, int]] = set()
+    group_sizes: list[int] = []
+    scoring_table = data.scoring_festival
+
+    total_score = 0
+    for start in own_occupied:
+        if start in visited:
+            continue
+        group: set[tuple[int, int]] = set()
+        queue = [start]
+        while queue:
+            pos = queue.pop()
+            if pos in visited or pos not in own_occupied:
+                continue
+            visited.add(pos)
+            group.add(pos)
+            r, c = pos
+            for nr, nc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
+                if (nr, nc) not in visited and (nr, nc) in own_occupied:
+                    queue.append((nr, nc))
+
+        if not (group & player_positions):
+            continue
+        size = len(group)
+        group_sizes.append(size)
+        points = scoring_table.get(min(size, 7), 0)
+        if size > 7:
+            from src.game.data_loader import FESTIVAL_BONUS_PER_EXTRA
+            points += FESTIVAL_BONUS_PER_EXTRA * (size - 7)
+        total_score += points
+
+    # Top-3 group sizes (descending), padded with 0
+    group_sizes.sort(reverse=True)
+    top3 = (group_sizes + [0, 0, 0])[:3]
+
+    # Count empty festival spaces adjacent to player's groups
+    all_festival_positions: set[tuple[int, int]] = {
+        (sp.row, sp.col) for sp in data.festival_spaces
+    }
+    occupied_any: set[tuple[int, int]] = {
+        (pc.row, pc.col)
+        for pc in all_placed
+        if pc.venue == VenueType.FESTIVAL
+    } | free_sample_positions
+    adj_empty = 0
+    for pos in own_occupied:
+        r, c = pos
+        for nr, nc in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
+            if (nr, nc) in all_festival_positions and (nr, nc) not in occupied_any:
+                adj_empty += 1
+
+    return np.array([
+        min(total_score / _FESTIVAL_SCORE_NORM, 1.0),
+        min(top3[0] / 7.0, 1.0),
+        min(top3[1] / 7.0, 1.0),
+        min(top3[2] / 7.0, 1.0),
+        min(adj_empty / _FESTIVAL_ADJ_NORM, 1.0),
+    ])
+
+
+def _encode_fromagerie_derived(
+    state: GameState, player_id: int, data: GameDataLoader,
+) -> np.ndarray:
+    """Fromagerie scoring-derived features (6 values).
+
+    [own_shelves/6, available_shelves/6, opp1_shelves/6, opp2_shelves/6,
+     opp3_shelves/6, unoccupied_point_bonus_norm]
+    """
+    all_placed = [pc for p in state.players for pc in p.cheese_tokens_on_board]
+    space_to_shelf: dict[int, int] = {sp.space_id: sp.shelf_id for sp in data.fromagerie_spaces}
+    shelf_map = {sh.shelf_id: sh for sh in data.fromagerie_shelves}
+
+    # Occupied spaces by any player
+    occupied_space_ids: set[int] = {
+        pc.space_id for pc in all_placed
+        if pc.venue == VenueType.FROMAGERIE and pc.space_id is not None
+    }
+
+    # Per-player shelf counts
+    def _shelf_count(pid: int) -> int:
+        shelves: set[int] = set()
+        for pc in all_placed:
+            if pc.venue == VenueType.FROMAGERIE and pc.player_id == pid and pc.space_id is not None:
+                sid = space_to_shelf.get(pc.space_id)
+                if sid is not None:
+                    shelves.add(sid)
+        return len(shelves)
+
+    own_shelves = _shelf_count(player_id)
+
+    # Available shelves: shelves with at least 1 empty space
+    available = 0
+    shelves_with_empty: set[int] = set()
+    for sp in data.fromagerie_spaces:
+        if sp.space_id not in occupied_space_ids:
+            shelves_with_empty.add(sp.shelf_id)
+    available = len(shelves_with_empty)
+
+    # Opponent shelf counts
+    opp_ids = [p.player_id for p in state.players if p.player_id != player_id]
+    opp_shelves = [_shelf_count(oid) for oid in opp_ids]
+
+    # Unoccupied point-bonus spaces
+    total_point_bonus = 0
+    for sp in data.fromagerie_spaces:
+        shelf = shelf_map.get(sp.shelf_id)
+        if shelf and shelf.column == "point_bonus" and sp.space_id not in occupied_space_ids:
+            total_point_bonus += 1
+
+    # Normalise point-bonus count by total point-bonus spaces
+    total_pb_spaces = sum(
+        1 for sp in data.fromagerie_spaces
+        if shelf_map.get(sp.shelf_id) and shelf_map[sp.shelf_id].column == "point_bonus"
+    )
+    pb_norm = total_point_bonus / max(total_pb_spaces, 1)
+
+    return np.array([
+        min(own_shelves / 6.0, 1.0),
+        min(available / 6.0, 1.0),
+        min(opp_shelves[0] / 6.0, 1.0) if len(opp_shelves) > 0 else 0.0,
+        min(opp_shelves[1] / 6.0, 1.0) if len(opp_shelves) > 1 else 0.0,
+        min(opp_shelves[2] / 6.0, 1.0) if len(opp_shelves) > 2 else 0.0,
+        min(pb_norm, 1.0),
+    ])
+
+
+def _encode_bistro_derived(
+    state: GameState, player_id: int, data: GameDataLoader,
+) -> np.ndarray:
+    """Bistro scoring-derived features (8 values).
+
+    [pairings/9, half_tables/9, bronze/9, silver/9, gold/9,
+     opp1_pairings/9, opp2_pairings/9, opp3_pairings/9]
+    """
+    all_placed = [pc for p in state.players for pc in p.cheese_tokens_on_board]
+    space_to_table: dict[int, int] = {sp.space_id: sp.table_id for sp in data.bistro_spaces}
+
+    def _bistro_stats(pid: int) -> tuple[int, int, int, int, int]:
+        """Return (pairings, half_tables, bronze, silver, gold) for a player."""
+        table_counts: dict[int, int] = defaultdict(int)
+        age_counts: dict[AgeType, int] = defaultdict(int)
+        for pc in all_placed:
+            if pc.venue != VenueType.BISTRO or pc.player_id != pid:
+                continue
+            tid = pc.table_id if pc.table_id is not None else space_to_table.get(pc.space_id)
+            if tid is not None:
+                table_counts[tid] += 1
+            age_counts[pc.age] += 1
+        pairings = sum(1 for cnt in table_counts.values() if cnt >= 2)
+        half_tables = sum(1 for cnt in table_counts.values() if cnt == 1)
+        return (
+            pairings, half_tables,
+            age_counts.get(AgeType.BRONZE, 0),
+            age_counts.get(AgeType.SILVER, 0),
+            age_counts.get(AgeType.GOLD, 0),
+        )
+
+    own = _bistro_stats(player_id)
+    opp_ids = [p.player_id for p in state.players if p.player_id != player_id]
+    opp_pairings = [_bistro_stats(oid)[0] for oid in opp_ids]
+
+    return np.array([
+        min(own[0] / 9.0, 1.0),  # pairings
+        min(own[1] / 9.0, 1.0),  # half-tables
+        min(own[2] / 9.0, 1.0),  # bronze
+        min(own[3] / 9.0, 1.0),  # silver
+        min(own[4] / 9.0, 1.0),  # gold
+        min(opp_pairings[0] / 9.0, 1.0) if len(opp_pairings) > 0 else 0.0,
+        min(opp_pairings[1] / 9.0, 1.0) if len(opp_pairings) > 1 else 0.0,
+        min(opp_pairings[2] / 9.0, 1.0) if len(opp_pairings) > 2 else 0.0,
+    ])
+
+
+def _encode_villes_derived(
+    state: GameState, player_id: int, data: GameDataLoader,
+) -> np.ndarray:
+    """Villes influence-derived features (36 values = 6 regions × 6).
+
+    Per region: [self_inf_norm, max_opp_norm, delta_norm,
+                 is_winning, is_tied, is_losing]
+    """
+    # Build influence map: {player_id: {region: count}}
+    influence: dict[int, dict[str, int]] = {p.player_id: defaultdict(int) for p in state.players}
+    for player in state.players:
+        for pc in player.cheese_tokens_on_board:
+            if pc.venue != VenueType.VILLES:
+                continue
+            for sp in data.villes_spaces:
+                if sp.space_id == pc.space_id:
+                    for region in sp.regions:
+                        influence[player.player_id][region] += 1
+                    break
+
+    parts = np.zeros(36)
+    opp_ids = [p.player_id for p in state.players if p.player_id != player_id]
+
+    for i, region in enumerate(_REGION_ORDER):
+        self_inf = influence[player_id].get(region, 0)
+        opp_infs = [influence[oid].get(region, 0) for oid in opp_ids]
+        max_opp = max(opp_infs) if opp_infs else 0
+
+        delta = self_inf - max_opp
+        # Normalise to [0, 1]
+        base = i * 6
+        parts[base + 0] = min(self_inf / _INFLUENCE_NORM, 1.0)
+        parts[base + 1] = min(max_opp / _INFLUENCE_NORM, 1.0)
+        parts[base + 2] = min(max((delta + _INFLUENCE_NORM) / (2 * _INFLUENCE_NORM), 0.0), 1.0)
+
+        # Winner status one-hot: [self_wins, tied, opp_wins]
+        if self_inf > max_opp and self_inf > 0:
+            parts[base + 3] = 1.0
+        elif self_inf == max_opp and self_inf > 0:
+            parts[base + 4] = 1.0
+        elif max_opp > self_inf:
+            parts[base + 5] = 1.0
+        # else: all zeros (no one has influence)
+
+    return parts

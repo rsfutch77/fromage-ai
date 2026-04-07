@@ -90,6 +90,7 @@ def train(n_games: int, data: "GameDataLoader", config_path: Path) -> QAgent:
     Path("output").mkdir(parents=True, exist_ok=True)
     model_save_dir.mkdir(parents=True, exist_ok=True)
     log_path = Path("output") / "training_log.jsonl"
+    log_path.write_text("", encoding="utf-8")  # clear previous run
 
     agent = QAgent(data=data, config=config)
 

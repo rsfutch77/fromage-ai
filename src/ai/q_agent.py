@@ -21,14 +21,17 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from src.ai.agent import Agent
-from src.ai.state_encoder import STATE_VECTOR_SIZE, encode_state
+from src.ai.state_encoder import STATE_VECTOR_SIZE, _BASE_SIZE, encode_state
 from src.game.actions import MAX_ACTIONS_PER_TURN, TurnAction, all_legal_turn_actions
 
 if TYPE_CHECKING:
     from src.game.data_loader import GameDataLoader
     from src.game.state import GameState
 
-_FEATURE_SIZE: int = STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN  # 397
+# NOTE: Saved models trained with STATE_VECTOR_SIZE=197 are incompatible with
+# the enhanced encoder (292). Set use_enhanced_encoder=False in agent config
+# to use legacy 197-feature encoding, or retrain from scratch.
+_FEATURE_SIZE: int = STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN  # 492
 _HIDDEN: int = 64
 
 
@@ -55,11 +58,14 @@ class QAgent(Agent):
         self._alpha: float = float(config.get("alpha", 0.001))
         self._gamma: float = float(config.get("gamma", 0.95))
         self._use_network: bool = bool(config.get("use_network_approx", False))
+        self._enhanced_encoder: bool = bool(config.get("use_enhanced_encoder", True))
+        self._state_size: int = STATE_VECTOR_SIZE if self._enhanced_encoder else _BASE_SIZE
+        self._feature_size: int = self._state_size + MAX_ACTIONS_PER_TURN
 
         if self._use_network:
             scale = 0.01
             self._params: dict[str, np.ndarray] = {
-                "W1": self._np_rng.normal(0, scale, (_FEATURE_SIZE, _HIDDEN)).astype(np.float64),
+                "W1": self._np_rng.normal(0, scale, (self._feature_size, _HIDDEN)).astype(np.float64),
                 "b1": np.zeros(_HIDDEN, dtype=np.float64),
                 "W2": self._np_rng.normal(0, scale, (_HIDDEN, _HIDDEN)).astype(np.float64),
                 "b2": np.zeros(_HIDDEN, dtype=np.float64),
@@ -67,7 +73,7 @@ class QAgent(Agent):
                 "b3": np.zeros(1, dtype=np.float64),
             }
         else:
-            self._weights: np.ndarray = np.zeros(_FEATURE_SIZE, dtype=np.float64)
+            self._weights: np.ndarray = np.zeros(self._feature_size, dtype=np.float64)
 
     # ------------------------------------------------------------------
     # Public interface
@@ -80,7 +86,7 @@ class QAgent(Agent):
             return TurnAction()
         if self._rng.random() < self._epsilon:
             return self._rng.choice(legal)
-        state_vec = encode_state(state, player_id, self._data)
+        state_vec = encode_state(state, player_id, self._data, enhanced=self._enhanced_encoder)
         q_values = [self._q_value(state_vec, i) for i in range(len(legal))]
         return legal[int(np.argmax(q_values))]
 
@@ -99,7 +105,7 @@ class QAgent(Agent):
         legal_cur = all_legal_turn_actions(state, player_id, self._data)
         action_idx = next((i for i, a in enumerate(legal_cur) if a == action), 0)
 
-        state_vec = encode_state(state, player_id, self._data)
+        state_vec = encode_state(state, player_id, self._data, enhanced=self._enhanced_encoder)
         next_state_vec = encode_state(next_state, player_id, self._data)
 
         legal_next = all_legal_turn_actions(next_state, player_id, self._data)
