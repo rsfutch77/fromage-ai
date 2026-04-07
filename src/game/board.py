@@ -11,7 +11,7 @@ from __future__ import annotations
 import copy
 import random
 
-from src.game.data_loader import GameDataLoader
+from src.game.data_loader import CustomerToken, GameDataLoader
 from src.game.state import GameState, PlayerState, Worker
 from src.game.types import CheeseType, RESOURCE_ORDER, WorkerLocation
 
@@ -67,8 +67,20 @@ def setup_game(data: GameDataLoader, seed: int | None = None) -> GameState:
     # (see plans1_project/assumptions.md).
     resource_tile_orientation = 0
 
+    # Shuffle customer token point values across regions
+    tokens = list(data.customer_tokens)
+    values = [(t.win_value, t.tie_value) for t in tokens]
+    rng.shuffle(values)
+    shuffled_tokens = [
+        CustomerToken(
+            region_id=t.region_id, region_name=t.region_name,
+            win_value=v[0], tie_value=v[1],
+        )
+        for t, v in zip(tokens, values)
+    ]
+
     # Build initial villes token holders (all unclaimed)
-    region_names = [ct.region_name for ct in data.customer_tokens]
+    region_names = [ct.region_name for ct in shuffled_tokens]
     villes_holders: dict[str, int | None] = {r: None for r in region_names}
 
     # Create players
@@ -104,6 +116,7 @@ def setup_game(data: GameDataLoader, seed: int | None = None) -> GameState:
         order_card_deck=order_deck,
         resource_tile_orientation=resource_tile_orientation,
         villes_customer_token_holders=villes_holders,
+        customer_tokens=shuffled_tokens,
     )
 
 

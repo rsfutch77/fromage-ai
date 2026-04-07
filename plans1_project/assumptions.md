@@ -63,10 +63,6 @@ Resource-bonus shelf bonuses require a player choice not encoded in `MakeCheeseA
 
 ---
 
-## Customer Tokens
-
-**Regional assignments are fixed** — loaded from `data/customer_tokens.csv` in fixed order; not randomly distributed at game start.
-
 ---
 
 ## Milking Parlour
@@ -92,3 +88,4 @@ Resource-bonus shelf bonuses require a player choice not encoded in `MakeCheeseA
 
 - Board ID assignment to players (random shuffle of 1–4 at setup)
 - Order card deck shuffle at setup (reproducible with optional seed)
+- Customer token placement on Villes regions at game start (point values shuffled across the 6 regions; reproducible with optional seed)

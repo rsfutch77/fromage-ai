@@ -193,3 +193,42 @@ def test_venue_facing_changes_with_rotation(loader):
     s2.rotation_index = 1
     venue_rot1 = s2.venue_facing(0)
     assert venue_rot0 != venue_rot1
+
+
+# ---------------------------------------------------------------------------
+# Customer token randomisation (stretch goal 1)
+# ---------------------------------------------------------------------------
+
+def test_customer_tokens_stored_on_state(loader):
+    state = setup_game(loader, seed=0)
+    assert len(state.customer_tokens) == 6
+    # Region names are preserved (positions stay the same)
+    region_names = {ct.region_name for ct in state.customer_tokens}
+    assert region_names == {"purple", "blue", "green", "white", "yellow", "pink"}
+
+
+def test_customer_tokens_same_seed_reproducible(loader):
+    s_a = setup_game(loader, seed=42)
+    s_b = setup_game(loader, seed=42)
+    vals_a = [(ct.region_name, ct.win_value) for ct in s_a.customer_tokens]
+    vals_b = [(ct.region_name, ct.win_value) for ct in s_b.customer_tokens]
+    assert vals_a == vals_b
+
+
+def test_customer_tokens_different_seeds_differ(loader):
+    """Run 10 seeds; assert not all produce the same token arrangement."""
+    arrangements = []
+    for seed in range(10):
+        state = setup_game(loader, seed=seed)
+        arrangement = tuple(ct.win_value for ct in state.customer_tokens)
+        arrangements.append(arrangement)
+    assert len(set(arrangements)) > 1, "All 10 seeds produced identical token arrangements"
+
+
+def test_customer_tokens_values_conserved(loader):
+    """Point values are shuffled, not lost — same multiset every game."""
+    original_values = sorted([7, 7, 8, 8, 9, 9])
+    for seed in range(5):
+        state = setup_game(loader, seed=seed)
+        actual = sorted(ct.win_value for ct in state.customer_tokens)
+        assert actual == original_values, f"Seed {seed}: values {actual} != {original_values}"

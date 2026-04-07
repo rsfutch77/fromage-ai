@@ -58,6 +58,7 @@ class QAgent(Agent):
         self._alpha: float = float(config.get("alpha", 0.001))
         self._gamma: float = float(config.get("gamma", 0.95))
         self._use_network: bool = bool(config.get("use_network_approx", False))
+        self._weight_decay: float = float(config.get("weight_decay", 1e-6))
         self._enhanced_encoder: bool = bool(config.get("use_enhanced_encoder", True))
         self._state_size: int = STATE_VECTOR_SIZE if self._enhanced_encoder else _BASE_SIZE
         self._feature_size: int = self._state_size + MAX_ACTIONS_PER_TURN
@@ -106,7 +107,7 @@ class QAgent(Agent):
         action_idx = next((i for i, a in enumerate(legal_cur) if a == action), 0)
 
         state_vec = encode_state(state, player_id, self._data, enhanced=self._enhanced_encoder)
-        next_state_vec = encode_state(next_state, player_id, self._data)
+        next_state_vec = encode_state(next_state, player_id, self._data, enhanced=self._enhanced_encoder)
 
         legal_next = all_legal_turn_actions(next_state, player_id, self._data)
         if legal_next:
@@ -119,10 +120,15 @@ class QAgent(Agent):
         q_sa = self._q_value(state_vec, action_idx)
         delta = reward + self._gamma * max_q_next - q_sa
 
+        # Clip TD error to prevent weight explosion
+        delta = float(np.clip(delta, -10.0, 10.0))
+
         if self._use_network:
             self._update_network(state_vec, action_idx, delta)
         else:
             phi = self._phi(state_vec, action_idx)
+            # L2 weight decay to prevent unbounded growth
+            self._weights *= (1.0 - self._weight_decay)
             self._weights += self._alpha * delta * phi
 
     def save(self, path: Path) -> None:
@@ -214,7 +220,9 @@ class QAgent(Agent):
         dW1 = np.outer(cache["x"], dz1)
         db1 = dz1
 
-        # Gradient ascent: w += alpha * delta * grad_Q
+        # Weight decay + gradient ascent: w += alpha * delta * grad_Q
+        for key in ("W1", "b1", "W2", "b2", "W3", "b3"):
+            self._params[key] *= (1.0 - self._weight_decay)
         self._params["W1"] += self._alpha * delta * dW1
         self._params["b1"] += self._alpha * delta * db1
         self._params["W2"] += self._alpha * delta * dW2

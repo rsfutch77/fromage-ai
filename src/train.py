@@ -33,8 +33,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--games",
         type=int,
-        default=10000,
-        help="Number of self-play training games (default: 10000)",
+        default=8000,
+        help="Number of self-play training games (default: 8000)",
     )
     parser.add_argument(
         "--config",

@@ -140,7 +140,7 @@ def score_villes(
     Mutates state.villes_customer_token_holders in place (end-of-game only).
     """
     villes_spaces = data.villes_spaces
-    customer_tokens = data.customer_tokens
+    customer_tokens = state.customer_tokens
 
     # Build influence map: {player_id: {region_name: count}}
     influence: dict[int, dict[str, int]] = {p.player_id: defaultdict(int) for p in state.players}

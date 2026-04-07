@@ -8,6 +8,7 @@ See requirements section 2.
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 
@@ -20,7 +21,7 @@ from src.game.types import (
     VENUE_ORDER,
     WorkerLocation,
 )
-from src.game.data_loader import OrderCard
+from src.game.data_loader import CustomerToken, OrderCard
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +85,23 @@ class PlayerState:
     fruit_spent_on_fruited: int = 0
     fruit_spent_on_jam: int = 0
 
+    def __deepcopy__(self, memo: dict) -> PlayerState:
+        """Share immutable PlacedCheese/OrderCard objects; only deep-copy Workers."""
+        return PlayerState(
+            player_id=self.player_id,
+            board_id=self.board_id,
+            resources=self.resources.copy(),
+            workers=[copy.deepcopy(w, memo) for w in self.workers],
+            cheese_tokens_remaining=self.cheese_tokens_remaining,
+            cheese_tokens_on_board=list(self.cheese_tokens_on_board),
+            order_cards_held=list(self.order_cards_held),
+            orders_completed=list(self.orders_completed),
+            structures_unlocked=list(self.structures_unlocked),
+            milking_parlours_used=list(self.milking_parlours_used),
+            fruit_spent_on_fruited=self.fruit_spent_on_fruited,
+            fruit_spent_on_jam=self.fruit_spent_on_jam,
+        )
+
 
 # ---------------------------------------------------------------------------
 # GameState
@@ -100,6 +118,7 @@ class GameState:
     order_card_deck: list[OrderCard]
     resource_tile_orientation: int        # 0–3; initial offset set at setup; rotation applied via rotation_index
     villes_customer_token_holders: dict[str, int | None]  # region → player_id or None
+    customer_tokens: list[CustomerToken]  # shuffled token assignment (region → point values)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -116,6 +135,20 @@ class GameState:
         rotation_index is added (same direction as venue_facing).
         """
         return RESOURCE_ORDER[(player_id + self.resource_tile_orientation + self.rotation_index) % 4]
+
+    def __deepcopy__(self, memo: dict) -> GameState:
+        """Share immutable sub-objects; only deep-copy players."""
+        return GameState(
+            rotation_index=self.rotation_index,
+            turn_number=self.turn_number,
+            players=[copy.deepcopy(p, memo) for p in self.players],
+            game_end_triggered=self.game_end_triggered,
+            game_over=self.game_over,
+            order_card_deck=list(self.order_card_deck),
+            resource_tile_orientation=self.resource_tile_orientation,
+            villes_customer_token_holders=self.villes_customer_token_holders.copy(),
+            customer_tokens=self.customer_tokens,
+        )
 
     # ------------------------------------------------------------------
     # Serialisation
@@ -251,6 +284,11 @@ def _state_to_dict(s: GameState) -> dict:
         "order_card_deck": [_order_card_to_dict(oc) for oc in s.order_card_deck],
         "resource_tile_orientation": s.resource_tile_orientation,
         "villes_customer_token_holders": s.villes_customer_token_holders,
+        "customer_tokens": [
+            {"region_id": ct.region_id, "region_name": ct.region_name,
+             "win_value": ct.win_value, "tie_value": ct.tie_value}
+            for ct in s.customer_tokens
+        ],
     }
 
 
@@ -264,4 +302,11 @@ def _state_from_dict(d: dict) -> GameState:
         order_card_deck=[_order_card_from_dict(oc) for oc in d["order_card_deck"]],
         resource_tile_orientation=d["resource_tile_orientation"],
         villes_customer_token_holders=d["villes_customer_token_holders"],
+        customer_tokens=[
+            CustomerToken(
+                region_id=ct["region_id"], region_name=ct["region_name"],
+                win_value=ct["win_value"], tie_value=ct["tie_value"],
+            )
+            for ct in d["customer_tokens"]
+        ],
     )

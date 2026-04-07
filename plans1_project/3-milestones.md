@@ -505,7 +505,7 @@ The charts also optionally read checkpoint files at `models/checkpoint_{game}.np
 
 ---
 
-## Stretch Goal: Customer Token Randomisation
+## Stretch Goal 1: Customer Token Randomisation
 
 In the real game, the 6 customer tokens (purple 7, blue 7, green 8, pink 8, white 9, yellow 9) are placed randomly on the Villes board at game start. The simulation currently fixes them in CSV order (see `assumptions.md`). This means Chart 13 may conflate positional advantage (which Villes spaces are easiest to reach) with token-value advantage, making its advice unreliable for real games.
 
@@ -513,15 +513,15 @@ In the real game, the 6 customer tokens (purple 7, blue 7, green 8, pink 8, whit
 
 ### Required changes (in order)
 
-- [ ] Remove the "Regional assignments are fixed" entry from `assumptions.md` and add "Customer token placement is randomised at game start" to the "Things That Are Randomised" section.
-- [ ] In `setup_game` (`src/game/board.py`), shuffle the list returned by `data.customer_tokens` before assigning region positions; use the existing `seed` parameter so games remain reproducible.
-- [ ] Update `GameState.villes_customer_token_holders` initialisation in `setup_game` to reflect the shuffled assignment rather than the CSV order.
-- [ ] Update `tests/test_board.py` to verify that two games with different seeds produce different token arrangements (statistical check: run 10 seeds, assert not all identical).
+- [x] Remove the "Regional assignments are fixed" entry from `assumptions.md` and add "Customer token placement is randomised at game start" to the "Things That Are Randomised" section.
+- [x] In `setup_game` (`src/game/board.py`), shuffle the list returned by `data.customer_tokens` before assigning region positions; use the existing `seed` parameter so games remain reproducible.
+- [x] Update `GameState.villes_customer_token_holders` initialisation in `setup_game` to reflect the shuffled assignment rather than the CSV order.
+- [x] Update `tests/test_board.py` to verify that two games with different seeds produce different token arrangements (statistical check: run 10 seeds, assert not all identical).
 - [ ] Re-run Chart 13 after this change and compare results against the fixed-assignment run to confirm whether the spatial vs value distinction matters.
 
 ---
 
-## Stretch Goal: Fromagerie Swap Resource (trade_resource_for_any)
+## Stretch Goal 2: Fromagerie Swap Resource (trade_resource_for_any)
 
 Shelf 1 (Bronze resource-bonus) grants the player a swap: give up one resource,
 receive any other. This requires a two-part player choice that is not captured
