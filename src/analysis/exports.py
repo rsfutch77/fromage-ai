@@ -3,11 +3,16 @@
 write_strategy_summary: writes output/strategy_summary.md with one finding
 block per chart (Charts 1–14).
 
-See requirements section 8.3.5 and Milestone 6.
+write_hyperparameter_signals: writes output/hyperparameter_signals.csv with
+11 computed signals from training logs and model checkpoints.
+
+See requirements sections 8.3.5 (strategy summary) and 13.2 (signals).
 """
 
 from __future__ import annotations
 
+import csv
+import glob as _glob_mod
 import json
 import logging
 from pathlib import Path
@@ -317,3 +322,239 @@ def write_strategy_summary(db: "ResultsDB", out_path: Path) -> None:
 
     out_path.write_text("\n\n".join(blocks) + "\n", encoding="utf-8")
     logger.info("Wrote strategy summary to %s (%d findings)", out_path, len(blocks) - 1)
+
+
+# ---------------------------------------------------------------------------
+# Hyperparameter signals CSV (requirement 13.2.1)
+# ---------------------------------------------------------------------------
+
+def read_training_log(log_path: Path) -> list[dict]:
+    """Read a newline-delimited JSON training log."""
+    entries: list[dict] = []
+    with open(log_path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                entries.append(json.loads(line))
+    return entries
+
+
+def write_hyperparameter_signals(
+    log_path: Path,
+    models_dir: Path,
+    config_path: Path,
+    out_path: Path,
+) -> None:
+    """Compute 11 training signals and write to CSV.
+
+    Schema: signal, value, unit, threshold, status, recommendation
+    """
+    with open(config_path, encoding="utf-8") as fh:
+        config = json.load(fh)
+
+    entries = read_training_log(log_path)
+    if not entries:
+        logger.warning("hyperparameter_signals skipped: empty training log")
+        return
+
+    epsilon_end = config.get("epsilon_end", 0.05)
+    last = entries[-1]
+
+    # --- Compute checkpoint weight norms ---
+    ckpt_pattern = str(models_dir / "checkpoint_*.npz")
+    ckpt_files = sorted(_glob_mod.glob(ckpt_pattern))
+    ckpt_norms: list[tuple[int, float]] = []
+    for f in ckpt_files:
+        try:
+            game_num = int(Path(f).stem.split("_", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        data = np.load(f)
+        if "w" in data:
+            ckpt_norms.append((game_num, float(np.linalg.norm(data["w"]))))
+    ckpt_norms.sort(key=lambda x: x[0])
+
+    # --- Signal computations ---
+    signals: list[dict] = []
+
+    # 1. epsilon_final
+    eps_final = last["epsilon"]
+    signals.append({
+        "signal": "epsilon_final",
+        "value": f"{eps_final:.4f}",
+        "unit": "",
+        "threshold": f"<= {epsilon_end}",
+        "status": "OK" if eps_final <= epsilon_end else "WARN",
+        "recommendation": "Epsilon has reached floor."
+        if eps_final <= epsilon_end else "Train more games to reach epsilon floor.",
+    })
+
+    # 2. epsilon_floor
+    eps_floor = min(e["epsilon"] for e in entries)
+    signals.append({
+        "signal": "epsilon_floor",
+        "value": f"{eps_floor:.4f}",
+        "unit": "",
+        "threshold": f"<= {epsilon_end}",
+        "status": "OK" if eps_floor <= epsilon_end else "WARN",
+        "recommendation": "Floor reached." if eps_floor <= epsilon_end
+        else "Epsilon never reached configured floor.",
+    })
+
+    # 3. games_to_epsilon_floor
+    games_to_floor = "n/a"
+    for e in entries:
+        if e["epsilon"] <= epsilon_end:
+            games_to_floor = str(e["game"])
+            break
+    signals.append({
+        "signal": "games_to_epsilon_floor",
+        "value": games_to_floor,
+        "unit": "games",
+        "threshold": "",
+        "status": "OK" if games_to_floor != "n/a" else "WARN",
+        "recommendation": f"Floor reached at game {games_to_floor}."
+        if games_to_floor != "n/a" else "Floor not yet reached.",
+    })
+
+    # 4. win_rate_final
+    wr_final = last["win_rate"]
+    wr_status = "OK" if wr_final > 0.3 else ("WARN" if wr_final > 0.25 else "CRIT")
+    signals.append({
+        "signal": "win_rate_final",
+        "value": f"{wr_final:.4f}",
+        "unit": "",
+        "threshold": "> 0.30 OK; > 0.25 WARN; else CRIT",
+        "status": wr_status,
+        "recommendation": "Agent is winning above baseline."
+        if wr_status == "OK" else "Agent is near or below random baseline.",
+    })
+
+    # 5. win_rate_peak
+    wr_peak = max(e["win_rate"] for e in entries)
+    signals.append({
+        "signal": "win_rate_peak",
+        "value": f"{wr_peak:.4f}",
+        "unit": "",
+        "threshold": "> 0.30",
+        "status": "OK" if wr_peak > 0.3 else "WARN",
+        "recommendation": "Peak win rate exceeds baseline."
+        if wr_peak > 0.3 else "Peak win rate is low; revise hyperparameters.",
+    })
+
+    # 6. win_rate_plateau_game — no improvement for >= 1000 games
+    plateau_game = "n/a"
+    best_so_far = entries[0]["win_rate"]
+    last_improvement_game = entries[0]["game"]
+    for e in entries[1:]:
+        if e["win_rate"] > best_so_far:
+            best_so_far = e["win_rate"]
+            last_improvement_game = e["game"]
+        elif e["game"] - last_improvement_game >= 1000:
+            plateau_game = str(last_improvement_game)
+            break
+    signals.append({
+        "signal": "win_rate_plateau_game",
+        "value": plateau_game,
+        "unit": "games",
+        "threshold": "",
+        "status": "OK" if plateau_game != "n/a" else "WARN",
+        "recommendation": f"Win rate plateaued at game {plateau_game}."
+        if plateau_game != "n/a" else "No plateau detected; agent may still be improving.",
+    })
+
+    # 7. score_mean_final
+    signals.append({
+        "signal": "score_mean_final",
+        "value": f"{last['mean_score']:.2f}",
+        "unit": "pts",
+        "threshold": "",
+        "status": "OK",
+        "recommendation": f"Final mean score is {last['mean_score']:.1f}.",
+    })
+
+    # 8. score_std_final
+    std_final = last["std_score"]
+    signals.append({
+        "signal": "score_std_final",
+        "value": f"{std_final:.2f}",
+        "unit": "pts",
+        "threshold": "",
+        "status": "OK" if std_final < 5.0 else "WARN",
+        "recommendation": "Score variance is reasonable."
+        if std_final < 5.0 else "High score variance; policy may not have converged.",
+    })
+
+    # 9. score_std_trend — compare late vs early std
+    half = len(entries) // 2
+    if half > 0:
+        early_std = np.mean([e["std_score"] for e in entries[:half]])
+        late_std = np.mean([e["std_score"] for e in entries[half:]])
+        trend = "decreasing" if late_std < early_std else "increasing"
+        trend_symbol = "\u2193" if late_std < early_std else "\u2191"
+    else:
+        trend = "n/a"
+        trend_symbol = "n/a"
+    signals.append({
+        "signal": "score_std_trend",
+        "value": trend_symbol,
+        "unit": "",
+        "threshold": "decreasing = OK",
+        "status": "OK" if trend == "decreasing" else "WARN",
+        "recommendation": "Score variance is narrowing (policy converging)."
+        if trend == "decreasing" else "Score variance is widening or flat.",
+    })
+
+    # 10. weight_norm_final
+    if ckpt_norms:
+        wn_final = ckpt_norms[-1][1]
+        signals.append({
+            "signal": "weight_norm_final",
+            "value": f"{wn_final:.4f}",
+            "unit": "",
+            "threshold": "",
+            "status": "OK",
+            "recommendation": f"Final weight norm is {wn_final:.2f}.",
+        })
+    else:
+        signals.append({
+            "signal": "weight_norm_final",
+            "value": "n/a",
+            "unit": "",
+            "threshold": "",
+            "status": "WARN",
+            "recommendation": "No checkpoints found.",
+        })
+
+    # 11. weight_norm_delta
+    if len(ckpt_norms) >= 2:
+        wn_delta = ckpt_norms[-1][1] - ckpt_norms[0][1]
+        delta_pct = abs(wn_delta) / (ckpt_norms[0][1] or 1) * 100
+        signals.append({
+            "signal": "weight_norm_delta",
+            "value": f"{wn_delta:+.4f}",
+            "unit": "",
+            "threshold": "< 10% change = stable",
+            "status": "OK" if delta_pct < 10 else "WARN",
+            "recommendation": "Weights are stable."
+            if delta_pct < 10 else "Weights are still shifting; consider more training.",
+        })
+    else:
+        signals.append({
+            "signal": "weight_norm_delta",
+            "value": "n/a",
+            "unit": "",
+            "threshold": "",
+            "status": "WARN",
+            "recommendation": "Need at least 2 checkpoints to compute delta.",
+        })
+
+    # --- Write CSV ---
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = ["signal", "value", "unit", "threshold", "status", "recommendation"]
+    with open(out_path, "w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(signals)
+
+    logger.info("Wrote %d hyperparameter signals to %s", len(signals), out_path)

@@ -457,19 +457,19 @@ The charts also optionally read checkpoint files at `models/checkpoint_{game}.np
 - `tests/test_learning_plots.py` — learning chart tests (req 13.3.1)
 
 ### Coding Tasks
-- [ ] L1: `plot_epsilon_decay(log_path: Path, config: dict, out_path: Path)` — line chart of ε vs game number; dashed line at `epsilon_end`; annotate convergence point
-- [ ] L2: `plot_win_rate_vs_training(log_path: Path, out_path: Path)` — line chart of win rate vs game number; dashed baseline at 0.25; annotate final win rate
-- [ ] L3: `plot_mean_score_training(log_path: Path, out_path: Path)` — line chart of mean score ± std dev band vs game number; annotate peak
-- [ ] L4: `plot_q_weight_norms(models_dir: Path, out_path: Path)` — line chart of L2 norm per checkpoint; reads all `models/checkpoint_*.npz`; computes `np.linalg.norm(weights["w"])`
-- [ ] `write_hyperparameter_signals(log_path, models_dir, config_path, out_path)` in `src/analysis/exports.py`: compute 11 signals (req 13.2.1); set `status`/`recommendation` per thresholds; write CSV
-- [ ] Add `--learning-plots` flag to `src/train.py`; when set, call L1–L4 and `write_hyperparameter_signals`
-- [ ] Write `tests/test_learning_plots.py`: write a synthetic training log JSONL + dummy checkpoint files; run all 4 chart functions; assert PNGs created and non-empty
+- [x] L1: `plot_epsilon_decay(log_path: Path, config: dict, out_path: Path)` — line chart of ε vs game number; dashed line at `epsilon_end`; annotate convergence point
+- [x] L2: `plot_win_rate_vs_training(log_path: Path, out_path: Path)` — line chart of win rate vs game number; dashed baseline at 0.25; annotate final win rate
+- [x] L3: `plot_mean_score_training(log_path: Path, out_path: Path)` — line chart of mean score ± std dev band vs game number; annotate peak
+- [x] L4: `plot_q_weight_norms(models_dir: Path, out_path: Path)` — line chart of L2 norm per checkpoint; reads all `models/checkpoint_*.npz`; computes `np.linalg.norm(weights["w"])`
+- [x] `write_hyperparameter_signals(log_path, models_dir, config_path, out_path)` in `src/analysis/exports.py`: compute 11 signals (req 13.2.1); set `status`/`recommendation` per thresholds; write CSV
+- [x] Add `--learning-plots` flag to `src/train.py`; when set, call L1–L4 and `write_hyperparameter_signals`
+- [x] Write `tests/test_learning_plots.py`: write a synthetic training log JSONL + dummy checkpoint files; run all 4 chart functions; assert PNGs created and non-empty
 
 #### Code Review Tasks
-- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
-- [ ] Review for duplicated code and try to consolidate and use imports instead
-- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
-- [ ] Check to make sure we have explicit imports and minimal coupling
+- [x] Review if you made any files that are too long, try to keep them below around 500 lines
+- [x] Review for duplicated code and try to consolidate and use imports instead
+- [x] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [x] Check to make sure we have explicit imports and minimal coupling
 
 ---
 

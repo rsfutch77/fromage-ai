@@ -109,6 +109,41 @@ def _generate_charts(db_path: Path, out_dir: Path) -> None:
     write_strategy_summary(db, out_dir / "strategy_summary.md")
 
 
+def _generate_learning_plots(config_path: Path, out_dir: Path) -> None:
+    """Generate L1–L4 learning charts and hyperparameter signals CSV."""
+    import json as _json
+
+    from src.analysis.exports import write_hyperparameter_signals
+    from src.analysis.plots import (
+        plot_epsilon_decay,
+        plot_mean_score_training,
+        plot_q_weight_norms,
+        plot_win_rate_vs_training,
+    )
+
+    log_path = out_dir / "training_log.jsonl"
+    models_dir = Path("models")
+    plots_dir = out_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
+
+    if not log_path.exists():
+        console.print(f"[yellow]Training log not found at {log_path}; skipping learning plots.[/yellow]")
+        return
+
+    with open(config_path, encoding="utf-8") as fh:
+        config = _json.load(fh)
+
+    console.print(f"Generating learning charts to [cyan]{plots_dir}[/cyan]…")
+    plot_epsilon_decay(log_path, config, plots_dir / "chart_L1_epsilon_decay.png")
+    plot_win_rate_vs_training(log_path, plots_dir / "chart_L2_win_rate_vs_training.png")
+    plot_mean_score_training(log_path, plots_dir / "chart_L3_mean_score_training.png")
+    plot_q_weight_norms(models_dir, plots_dir / "chart_L4_q_weight_norms.png")
+
+    signals_path = out_dir / "hyperparameter_signals.csv"
+    write_hyperparameter_signals(log_path, models_dir, config_path, signals_path)
+    console.print(f"Wrote hyperparameter signals to [cyan]{signals_path}[/cyan]")
+
+
 def main() -> None:
     args = _parse_args()
 
@@ -171,9 +206,7 @@ def main() -> None:
     console.print(table)
 
     if args.learning_plots:
-        console.print(
-            "[yellow]--learning-plots is not yet implemented (Milestone 9).[/yellow]"
-        )
+        _generate_learning_plots(args.config, Path(args.out))
 
 
 if __name__ == "__main__":

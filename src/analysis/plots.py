@@ -1,14 +1,15 @@
-"""Game-analysis matplotlib charts (Charts 1–14).
+"""Game-analysis matplotlib charts (Charts 1–14) and learning-performance
+charts (L1–L4).
 
-All functions read from a ResultsDB instance and write PNGs to out_dir.
-Each function skips silently (with a warning log) when fewer than
-MIN_GAMES_FOR_CHART rows are available.
+Charts 1–14 read from a ResultsDB instance and write PNGs to out_dir.
+Charts L1–L4 read from a training log JSONL and/or model checkpoint files.
 
-See requirements section 8.3 and Milestone 6.
+See requirements sections 8.3 (game charts) and 13.1 (learning charts).
 """
 
 from __future__ import annotations
 
+import glob as _glob_mod
 import json
 import logging
 from collections import defaultdict
@@ -19,6 +20,8 @@ import matplotlib
 matplotlib.use("Agg")  # non-interactive backend; safe for tests / headless servers
 import matplotlib.pyplot as plt
 import numpy as np
+
+from src.analysis.exports import read_training_log
 
 if TYPE_CHECKING:
     from src.analysis.results_db import ResultsDB
@@ -463,3 +466,170 @@ def plot_fruit_balance_scatter(db: "ResultsDB", out_dir: Path) -> None:
     ax.set_title("Fruit balance: fruited vs jam (by outcome)")
     ax.legend()
     _save(fig, out_dir, "chart_14_fruit_balance_scatter.png")
+
+
+# ---------------------------------------------------------------------------
+# Chart L1 — Epsilon decay curve
+# ---------------------------------------------------------------------------
+
+def plot_epsilon_decay(log_path: Path, config: dict, out_path: Path) -> None:
+    """Line chart of epsilon vs game number with dashed floor line."""
+    entries = read_training_log(log_path)
+    if not entries:
+        logger.warning("Chart L1 skipped: empty training log")
+        return
+
+    games = [e["game"] for e in entries]
+    epsilons = [e["epsilon"] for e in entries]
+    epsilon_end = config.get("epsilon_end", 0.05)
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(games, epsilons, "o-", markersize=3, label="epsilon")
+    ax.axhline(epsilon_end, color="red", linestyle="--",
+               label=f"epsilon_end = {epsilon_end}")
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_xlabel("Game")
+    ax.set_ylabel("Epsilon")
+    ax.set_title("L1 — Epsilon decay curve")
+    ax.legend()
+
+    # Annotate convergence point (first entry where epsilon <= epsilon_end)
+    for e in entries:
+        if e["epsilon"] <= epsilon_end:
+            ax.annotate(
+                f"floor at game {e['game']}",
+                xy=(e["game"], e["epsilon"]),
+                xytext=(e["game"], e["epsilon"] + 0.15),
+                arrowprops={"arrowstyle": "->", "color": "grey"},
+                fontsize=8, ha="center",
+            )
+            break
+    else:
+        # Still decaying — mark current epsilon
+        last = entries[-1]
+        ax.annotate(
+            f"current: {last['epsilon']:.3f}",
+            xy=(last["game"], last["epsilon"]),
+            xytext=(last["game"], last["epsilon"] + 0.15),
+            arrowprops={"arrowstyle": "->", "color": "grey"},
+            fontsize=8, ha="center",
+        )
+
+    _save(fig, out_path.parent, out_path.name)
+
+
+# ---------------------------------------------------------------------------
+# Chart L2 — Win rate vs training progress
+# ---------------------------------------------------------------------------
+
+def plot_win_rate_vs_training(log_path: Path, out_path: Path) -> None:
+    """Line chart of win rate vs game number with random baseline."""
+    entries = read_training_log(log_path)
+    if not entries:
+        logger.warning("Chart L2 skipped: empty training log")
+        return
+
+    games = [e["game"] for e in entries]
+    win_rates = [e["win_rate"] for e in entries]
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(games, win_rates, "o-", markersize=3, color="#2196F3", label="win rate")
+    ax.axhline(0.25, color="red", linestyle="--", label="random baseline (0.25)")
+    ax.set_ylim(-0.02, 1.02)
+    ax.set_xlabel("Game")
+    ax.set_ylabel("Win rate")
+    ax.set_title("L2 — Win rate vs training progress")
+    ax.legend()
+
+    # Annotate final win rate
+    last = entries[-1]
+    ax.annotate(
+        f"final: {last['win_rate']:.3f}",
+        xy=(last["game"], last["win_rate"]),
+        xytext=(last["game"] - (games[-1] - games[0]) * 0.15, last["win_rate"] + 0.1),
+        arrowprops={"arrowstyle": "->", "color": "grey"},
+        fontsize=8,
+    )
+
+    _save(fig, out_path.parent, out_path.name)
+
+
+# ---------------------------------------------------------------------------
+# Chart L3 — Mean score over training (with variance band)
+# ---------------------------------------------------------------------------
+
+def plot_mean_score_training(log_path: Path, out_path: Path) -> None:
+    """Line chart of mean score +/- 1 std dev vs game number."""
+    entries = read_training_log(log_path)
+    if not entries:
+        logger.warning("Chart L3 skipped: empty training log")
+        return
+
+    games = np.array([e["game"] for e in entries])
+    means = np.array([e["mean_score"] for e in entries])
+    stds = np.array([e["std_score"] for e in entries])
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(games, means, "o-", markersize=3, color="#4CAF50", label="mean score")
+    ax.fill_between(games, means - stds, means + stds, alpha=0.2, color="#4CAF50",
+                    label="\u00b11 std dev")
+    ax.set_xlabel("Game")
+    ax.set_ylabel("Total prestige score")
+    ax.set_title("L3 — Mean score over training")
+    ax.legend()
+
+    # Annotate peak
+    peak_idx = int(np.argmax(means))
+    ax.annotate(
+        f"peak: {means[peak_idx]:.1f} @ game {games[peak_idx]}",
+        xy=(games[peak_idx], means[peak_idx]),
+        xytext=(games[peak_idx], means[peak_idx] + stds[peak_idx] + 1),
+        arrowprops={"arrowstyle": "->", "color": "grey"},
+        fontsize=8, ha="center",
+    )
+
+    _save(fig, out_path.parent, out_path.name)
+
+
+# ---------------------------------------------------------------------------
+# Chart L4 — Q-weight magnitude over checkpoints
+# ---------------------------------------------------------------------------
+
+def plot_q_weight_norms(models_dir: Path, out_path: Path) -> None:
+    """Line chart of L2 norm of Q-weight vector per checkpoint."""
+    pattern = str(models_dir / "checkpoint_*.npz")
+    files = sorted(_glob_mod.glob(pattern))
+    if not files:
+        logger.warning("Chart L4 skipped: no checkpoint files found in %s", models_dir)
+        return
+
+    game_nums: list[int] = []
+    norms: list[float] = []
+    for f in files:
+        fname = Path(f).stem  # e.g. "checkpoint_1000"
+        try:
+            game_num = int(fname.split("_", 1)[1])
+        except (IndexError, ValueError):
+            continue
+        data = np.load(f)
+        if "w" not in data:
+            continue
+        game_nums.append(game_num)
+        norms.append(float(np.linalg.norm(data["w"])))
+
+    if not game_nums:
+        logger.warning("Chart L4 skipped: no valid checkpoint data")
+        return
+
+    # Sort by game number
+    order = np.argsort(game_nums)
+    game_nums = [game_nums[i] for i in order]
+    norms = [norms[i] for i in order]
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.plot(game_nums, norms, "o-", markersize=4, color="#7E57C2")
+    ax.set_xlabel("Checkpoint (game)")
+    ax.set_ylabel("L2 norm of weight vector")
+    ax.set_title("L4 — Q-weight magnitude over checkpoints")
+
+    _save(fig, out_path.parent, out_path.name)
