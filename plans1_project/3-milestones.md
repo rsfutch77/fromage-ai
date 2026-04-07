@@ -473,6 +473,38 @@ The charts also optionally read checkpoint files at `models/checkpoint_{game}.np
 
 ---
 
+## Milestone 10: Enhanced State Encoder
+- **Focus**: Replace the current 197-feature raw-occupancy encoder with a richer encoder that includes venue/resource lookahead, worker turns-until-available, and pre-computed scoring-derived features (Festival BFS groups, Fromagerie shelf counts, Bistro pairings, Villes influence per region). See the `[ASPIRATIONAL]` design notes at the top of `src/ai/state_encoder.py` for the full spec. Trigger: run 10 000 games with Milestone 8 training; if win rate plateaus below 0.35 or fails to improve consistently, the linear approximator likely cannot extract the scoring structure from raw occupancy flags and this milestone should be prioritised.
+
+### Plan Review
+- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+- [ ] Define convenient feature flags.
+
+### Outputs
+- `src/ai/state_encoder.py` — rewritten `encode_state` and updated `STATE_VECTOR_SIZE`
+- `tests/test_state_encoder.py` — updated tests for new vector length and new feature ranges
+
+### Coding Tasks
+- [ ] 10E.1 Venue/resource lookahead sub-vector: one-hot(4) venue at rotation+0..+3; one-hot(4) resource at rotation+0..+2 (28 features)
+- [ ] 10E.2 Worker turns-until-available sub-vector: for each of 3 cheese types, one-hot(4) where index = turns until worker is in hand (12 features)
+- [ ] 10E.3 Festival derived sub-vector: `score_festival` result (normalised), top-3 connected group sizes (normalised by 7), count of empty adjacent spaces (normalised)
+- [ ] 10E.4 Fromagerie derived sub-vector: own distinct shelves occupied (normalised by 6), shelves still available (normalised by 6), each opponent's shelf count (3 × normalised by 6), count of unoccupied point-bonus spaces available (normalised)
+- [ ] 10E.5 Bistro derived sub-vector: own pairings (normalised by 9), own half-tables (normalised by 9), own Bronze/Silver/Gold token counts (normalised by 9 each), each opponent's pairings (3 × normalised by 9)
+- [ ] 10E.6 Villes derived sub-vector: per region (6 regions) — self influence (normalised), max-opponent influence (normalised), delta (self − max_opp, normalised), winner status one-hot(3) = 6 × 6 = 36 features
+- [ ] 10E.7 Update `STATE_VECTOR_SIZE` constant; update assertion in `encode_state`; update `_FEATURE_SIZE` in `q_agent.py` (depends on STATE_VECTOR_SIZE); re-initialise weights (saved models from earlier training are incompatible with the new vector size — document this clearly)
+- [ ] 10E.8 Update `tests/test_state_encoder.py`: verify new vector length; verify scoring-derived features are non-zero for a state with known placements; verify lookahead features match expected rotation offsets
+
+#### Code Review Tasks
+- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
+- [ ] Review for duplicated code and try to consolidate and use imports instead
+- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [ ] Check to make sure we have explicit imports and minimal coupling
+
+---
+
 ## Stretch Goal: Customer Token Randomisation
 
 In the real game, the 6 customer tokens (purple 7, blue 7, green 8, pink 8, white 9, yellow 9) are placed randomly on the Villes board at game start. The simulation currently fixes them in CSV order (see `assumptions.md`). This means Chart 13 may conflate positional advantage (which Villes spaces are easiest to reach) with token-value advantage, making its advice unreliable for real games.
