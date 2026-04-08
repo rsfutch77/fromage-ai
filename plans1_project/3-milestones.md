@@ -516,8 +516,7 @@ In the real game, the 6 customer tokens (purple 7, blue 7, green 8, pink 8, whit
 - [x] Remove the "Regional assignments are fixed" entry from `assumptions.md` and add "Customer token placement is randomised at game start" to the "Things That Are Randomised" section.
 - [x] In `setup_game` (`src/game/board.py`), shuffle the list returned by `data.customer_tokens` before assigning region positions; use the existing `seed` parameter so games remain reproducible.
 - [x] Update `GameState.villes_customer_token_holders` initialisation in `setup_game` to reflect the shuffled assignment rather than the CSV order.
-- [x] Update `tests/test_board.py` to verify that two games with different seeds produce different token arrangements (statistical check: run 10 seeds, assert not all identical).
-- [ ] Re-run Chart 13 after this change and compare results against the fixed-assignment run to confirm whether the spatial vs value distinction matters.
+- [x] Update `tests/test_board.py` to verify that two games with different seeds produce different token arrangements (statistical check: run 10 seeds, assert not all identical).\
 
 ---
 
@@ -545,3 +544,89 @@ engine (`engine.py: _apply_fromagerie_shelf_bonus`).
 
 Note: The state vector already includes self resource counts (fruit, livestock,
 structure), so no new state features are needed — only action encoding changes.
+
+---
+
+## Milestone 11: Parallel Hyperparameter Sweep
+- **Focus**: Build a multiprocessing-based hyperparameter sweep tool (`src/sweep.py`) that runs multiple short training runs in parallel across CPU cores, each with a different config, and produces a comparison CSV so the best hyperparameter combination can be identified before committing to a full-length training run. Also optimise the training loop's evaluation overhead to reduce per-run wall time.
+
+### Plan Review
+- [ ] Verify that the feature plan fully describes the intended feature, ensuring all details are present and unambiguous.
+- [ ] Confirm that all aspects of the feature plan are adequately addressed and covered by the defined requirements.
+- [ ] Ensure that all requirements pertinent to the feature are properly organized and allocated to the correct milestones.
+- [ ] Check that the files designated as outputs for the milestone are capable of completely containing the features planned for that specific milestone.
+- [ ] Define convenient feature flags.
+
+### Context & Motivation
+
+A single training run with default parameters (`--games 8000`, `eval_interval=500`, 100 eval games per checkpoint) takes ~2 hours. Tuning hyperparameters (alpha, gamma, epsilon schedule, weight_decay, use_network_approx) requires many sequential runs, making iteration painfully slow. The sweep tool solves this by:
+
+1. Running N configs **in parallel** via `multiprocessing`, one per CPU core.
+2. Using **shorter screening runs** (e.g. 2000–3000 games) to cheaply rank configs.
+3. **Reducing eval overhead** — fewer eval games and less frequent eval for screening.
+4. Producing a **comparison CSV** so the user can pick the best config and do one full run.
+
+### Outputs
+- `src/sweep.py` — CLI entry point for the hyperparameter sweep
+- `config/sweep_config.json` — default sweep parameter grid
+- `output/sweep_results.csv` — comparison CSV written after sweep completes
+- `tests/test_sweep.py` — sweep tests
+
+### Coding Tasks
+
+#### 11.1 Sweep Config Schema
+- [ ] Create `config/sweep_config.json` with the following structure:
+  ```json
+  {
+    "base_config": "config/agent_config.json",
+    "screening_games": 2000,
+    "screening_eval_interval": 500,
+    "screening_eval_games": 50,
+    "max_workers": null,
+    "grid": {
+      "alpha": [0.001, 0.005, 0.01, 0.02],
+      "gamma": [0.9, 0.95, 0.99],
+      "epsilon_decay_games": [1500, 3000, 5000],
+      "weight_decay": [1e-6, 1e-5]
+    }
+  }
+  ```
+  `max_workers: null` means use `os.cpu_count()`. Grid produces the Cartesian product of all parameter lists.
+
+#### 11.2 Single-Run Worker Function
+- [ ] Implement `_run_single_config(run_id: int, config: dict, n_games: int, eval_interval: int, eval_games: int, data_dir: Path) -> dict` — a top-level function (picklable for multiprocessing) that:
+  - Creates a fresh `GameDataLoader` (each process needs its own).
+  - Creates a temporary config file with the given hyperparameters.
+  - Calls `train()` with the screening game count.
+  - Calls `evaluate()` on the trained agent.
+  - Returns a dict: `{run_id, config_params, win_rate, mean_pp, pp_delta, final_epsilon, elapsed_seconds}`.
+
+#### 11.3 Parallel Sweep Runner
+- [ ] Implement `run_sweep(sweep_config_path: Path) -> list[dict]` in `src/sweep.py`:
+  - Load sweep config, compute Cartesian product of grid params.
+  - Use `multiprocessing.Pool(max_workers)` with `pool.map` to run all configs in parallel.
+  - Collect results, sort by `win_rate` descending (tiebreak by `pp_delta`).
+  - Write results to `output/sweep_results.csv` with columns: `rank, run_id, win_rate, mean_pp, pp_delta, elapsed_seconds, alpha, gamma, epsilon_decay_games, weight_decay, ...` (one column per swept param).
+  - Print a `rich` summary table of the top 5 configs.
+
+#### 11.4 Sweep CLI Entry Point
+- [ ] `src/sweep.py` as CLI: `python -m src.sweep --config config/sweep_config.json --seed 42`
+  - `--config` path to sweep config (default `config/sweep_config.json`).
+  - `--seed` optional global seed for reproducibility.
+  - `--dry-run` flag that prints the grid (number of combos, estimated parallelism) without running.
+  - Show a progress bar (via `rich`) tracking completed runs out of total.
+
+#### 11.5 Parallel Evaluation Helper
+- [ ] Add `evaluate_parallel(agent, n_games, data, max_workers) -> dict` in `src/ai/training.py` that uses `multiprocessing.Pool` to run evaluation games in parallel. Use this in the sweep worker to speed up the per-checkpoint eval. Keep the existing sequential `evaluate()` as the default for normal training (simpler, no process overhead for small eval counts).
+
+#### 11.6 Tests
+- [ ] Write `tests/test_sweep.py`:
+  - Test that grid expansion produces the correct number of combinations (e.g. 4×3×3×2 = 72).
+  - Test `_run_single_config` with a tiny run (5 games) returns the expected result keys.
+  - Test that `run_sweep` with a minimal 2-combo grid produces a CSV with the correct columns and row count.
+
+#### Code Review Tasks
+- [ ] Review if you made any files that are too long, try to keep them below around 500 lines
+- [ ] Review for duplicated code and try to consolidate and use imports instead
+- [ ] Review if you made any changes that need to be propagated to requirements, milestones, or plans
+- [ ] Check to make sure we have explicit imports and minimal coupling
