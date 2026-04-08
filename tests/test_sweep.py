@@ -58,8 +58,9 @@ def test_run_single_config_keys(data: GameDataLoader) -> None:
         "weight_decay": 1e-6,
         "use_network_approx": False,
     }
-    # (run_id, combo_id, repeat, config, n_games, eval_interval, eval_games, final_eval_games, seed)
-    args = (0, 0, 0, config, 5, 5, 3, 5, 42)
+    # (run_id, combo_id, repeat, config, n_games, eval_interval, eval_games, final_eval_games, seed, swept_keys)
+    swept_keys = ["alpha", "gamma", "epsilon_decay_games", "weight_decay"]
+    args = (0, 0, 0, config, 5, 5, 3, 5, 42, swept_keys)
     result = _run_single_config(args)
 
     expected_keys = {

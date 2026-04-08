@@ -5,11 +5,12 @@
   "screening_eval_games": 50,
   "final_eval_games": 200,
   "max_workers": 19,
-  "repeats": 5,
+  "repeats": 3,
   "grid": {
-    "alpha": [0.001, 0.005],
+    "alpha": [0.0005, 0.001, 0.005],
     "gamma": [0.9],
-    "epsilon_decay_games": [1500, 3000, 5000],
-    "weight_decay": [1e-6, 1e-5]
+    "epsilon_decay_games": [3000, 5000],
+    "weight_decay": [1e-5, 1e-4],
+    "use_network_approx": [true]
   }
 }

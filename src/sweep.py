@@ -80,9 +80,9 @@ def _run_single_config(args: tuple) -> dict:
 
     Accepts a single tuple for compatibility with ``Pool.map``:
     ``(run_id, combo_id, repeat, config, n_games, eval_interval,
-      eval_games, final_eval_games, seed)``.
+      eval_games, final_eval_games, seed, swept_keys)``.
     """
-    run_id, combo_id, repeat, config, n_games, eval_interval, eval_games, final_eval_games, seed = args
+    run_id, combo_id, repeat, config, n_games, eval_interval, eval_games, final_eval_games, seed, swept_keys = args
 
     if seed is not None:
         import random
@@ -109,11 +109,7 @@ def _run_single_config(args: tuple) -> dict:
     elapsed = time.perf_counter() - t0
 
     # Extract swept params for the results row
-    swept_params = {
-        k: config[k]
-        for k in ("alpha", "gamma", "epsilon_decay_games", "weight_decay")
-        if k in config
-    }
+    swept_params = {k: config[k] for k in swept_keys if k in config}
 
     return {
         "run_id": run_id,
@@ -259,6 +255,7 @@ def run_sweep(sweep_config_path: Path, seed: int | None = None) -> list[dict]:
     )
 
     # Build argument tuples: one per (combo, repeat)
+    swept_keys = list(sweep_cfg["grid"].keys())
     work_items: list[tuple] = []
     run_id = 0
     for combo_id, combo in enumerate(grid_combos):
@@ -268,7 +265,7 @@ def run_sweep(sweep_config_path: Path, seed: int | None = None) -> list[dict]:
             run_seed = (seed + run_id) if seed is not None else None
             work_items.append(
                 (run_id, combo_id, repeat, config, n_games, eval_interval,
-                 eval_games, final_eval_games, run_seed)
+                 eval_games, final_eval_games, run_seed, swept_keys)
             )
             run_id += 1
 
@@ -328,9 +325,9 @@ def run_sweep(sweep_config_path: Path, seed: int | None = None) -> list[dict]:
         # Write aggregated summary CSV and print it
         aggregated = _aggregate_results(results, swept_keys)
         _write_summary_csv(aggregated, swept_keys)
-        _print_top_summary(aggregated)
+        _print_top_summary(aggregated, swept_keys)
     else:
-        _print_top_results(results)
+        _print_top_results(results, swept_keys)
 
     return results
 
@@ -378,7 +375,7 @@ def _write_summary_csv(aggregated: list[dict], swept_keys: list[str]) -> None:
     console.print(f"Summary results written to [cyan]{out_path}[/cyan]")
 
 
-def _print_top_results(results: list[dict], n: int = 5) -> None:
+def _print_top_results(results: list[dict], swept_keys: list[str], n: int = 5) -> None:
     """Print a rich table of the top *n* per-run results."""
     table = Table(title=f"Top {min(n, len(results))} Sweep Results")
     table.add_column("Rank", style="bold", justify="right")
@@ -387,29 +384,25 @@ def _print_top_results(results: list[dict], n: int = 5) -> None:
     table.add_column("PP Delta", justify="right", style="cyan")
     table.add_column("Mean PP", justify="right")
     table.add_column("Time (s)", justify="right")
-    table.add_column("alpha", justify="right")
-    table.add_column("gamma", justify="right")
-    table.add_column("eps_decay", justify="right")
-    table.add_column("w_decay", justify="right")
+    for k in swept_keys:
+        table.add_column(k, justify="right")
 
     for r in results[:n]:
-        table.add_row(
+        row = [
             str(r["rank"]),
             str(r["run_id"]),
             f"{r['win_rate']:.3f}",
             f"{r['pp_delta']:+.1f}",
             f"{r['mean_pp']:.1f}",
             f"{r['elapsed_seconds']:.0f}",
-            str(r.get("alpha", "")),
-            str(r.get("gamma", "")),
-            str(r.get("epsilon_decay_games", "")),
-            str(r.get("weight_decay", "")),
-        )
+        ]
+        row += [str(r.get(k, "")) for k in swept_keys]
+        table.add_row(*row)
 
     console.print(table)
 
 
-def _print_top_summary(aggregated: list[dict], n: int = 10) -> None:
+def _print_top_summary(aggregated: list[dict], swept_keys: list[str], n: int = 10) -> None:
     """Print a rich table of the top *n* aggregated combos."""
     table = Table(title=f"Top {min(n, len(aggregated))} Configs (averaged across repeats)")
     table.add_column("Rank", style="bold", justify="right")
@@ -418,24 +411,20 @@ def _print_top_summary(aggregated: list[dict], n: int = 10) -> None:
     table.add_column("Std WR", justify="right", style="dim")
     table.add_column("Range WR", justify="right")
     table.add_column("Mean PPD", justify="right", style="cyan")
-    table.add_column("alpha", justify="right")
-    table.add_column("gamma", justify="right")
-    table.add_column("eps_decay", justify="right")
-    table.add_column("w_decay", justify="right")
+    for k in swept_keys:
+        table.add_column(k, justify="right")
 
     for r in aggregated[:n]:
-        table.add_row(
+        row = [
             str(r["rank"]),
             str(r["combo_id"]),
             f"{r['mean_win_rate']:.3f}",
             f"{r['std_win_rate']:.3f}",
             f"{r['min_win_rate']:.2f}–{r['max_win_rate']:.2f}",
             f"{r['mean_pp_delta']:+.1f}",
-            str(r.get("alpha", "")),
-            str(r.get("gamma", "")),
-            str(r.get("epsilon_decay_games", "")),
-            str(r.get("weight_decay", "")),
-        )
+        ]
+        row += [str(r.get(k, "")) for k in swept_keys]
+        table.add_row(*row)
 
     console.print(table)
 
