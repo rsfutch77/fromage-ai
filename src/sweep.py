@@ -5,6 +5,10 @@ a different hyperparameter config from a Cartesian product grid.  Produces
 a ranked comparison CSV so the best config can be identified before
 committing to a full-length training run.
 
+Supports ``"repeats": N`` in the sweep config to run each combo N times
+with different seeds, producing both a per-run CSV and an aggregated
+summary CSV with mean/std across repeats.
+
 Usage::
 
     python -m src.sweep --config config/sweep_config.json --seed 42
@@ -20,6 +24,7 @@ import csv
 import itertools
 import json
 import logging
+import math
 import multiprocessing
 import os
 import threading
@@ -74,9 +79,10 @@ def _run_single_config(args: tuple) -> dict:
     """Train one config and return summary metrics.
 
     Accepts a single tuple for compatibility with ``Pool.map``:
-    ``(run_id, config, n_games, eval_interval, eval_games, final_eval_games, seed)``.
+    ``(run_id, combo_id, repeat, config, n_games, eval_interval,
+      eval_games, final_eval_games, seed)``.
     """
-    run_id, config, n_games, eval_interval, eval_games, final_eval_games, seed = args
+    run_id, combo_id, repeat, config, n_games, eval_interval, eval_games, final_eval_games, seed = args
 
     if seed is not None:
         import random
@@ -111,6 +117,8 @@ def _run_single_config(args: tuple) -> dict:
 
     return {
         "run_id": run_id,
+        "combo_id": combo_id,
+        "repeat": repeat,
         "win_rate": final_result["win_rate"],
         "mean_pp": final_result["mean_pp"],
         "pp_delta": final_result["mean_pp_delta_vs_random"],
@@ -166,13 +174,72 @@ def _progress_reader(
 
 
 # ---------------------------------------------------------------------------
+# Aggregation
+# ---------------------------------------------------------------------------
+
+def _aggregate_results(
+    results: list[dict], swept_keys: list[str],
+) -> list[dict]:
+    """Group results by combo_id, compute mean/std for key metrics.
+
+    Returns one row per combo, sorted by mean_win_rate descending
+    (tiebreak by mean_pp_delta).
+    """
+    from collections import defaultdict
+
+    by_combo: dict[int, list[dict]] = defaultdict(list)
+    for r in results:
+        by_combo[r["combo_id"]].append(r)
+
+    aggregated: list[dict] = []
+    for combo_id, runs in by_combo.items():
+        n = len(runs)
+        win_rates = [r["win_rate"] for r in runs]
+        pp_deltas = [r["pp_delta"] for r in runs]
+        mean_pps = [r["mean_pp"] for r in runs]
+
+        mean_wr = sum(win_rates) / n
+        mean_ppd = sum(pp_deltas) / n
+        mean_pp = sum(mean_pps) / n
+
+        row: dict = {
+            "combo_id": combo_id,
+            "repeats": n,
+            "mean_win_rate": round(mean_wr, 4),
+            "std_win_rate": round(_std(win_rates), 4),
+            "mean_pp_delta": round(mean_ppd, 2),
+            "std_pp_delta": round(_std(pp_deltas), 2),
+            "mean_pp": round(mean_pp, 2),
+            "min_win_rate": round(min(win_rates), 4),
+            "max_win_rate": round(max(win_rates), 4),
+        }
+        # Copy swept params from first run (same for all repeats)
+        for k in swept_keys:
+            row[k] = runs[0].get(k)
+        aggregated.append(row)
+
+    aggregated.sort(key=lambda r: (-r["mean_win_rate"], -r["mean_pp_delta"]))
+    for rank, r in enumerate(aggregated, 1):
+        r["rank"] = rank
+    return aggregated
+
+
+def _std(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = sum(values) / len(values)
+    return math.sqrt(sum((v - mean) ** 2 for v in values) / len(values))
+
+
+# ---------------------------------------------------------------------------
 # Sweep runner
 # ---------------------------------------------------------------------------
 
 def run_sweep(sweep_config_path: Path, seed: int | None = None) -> list[dict]:
     """Run a full hyperparameter sweep and write results CSV.
 
-    Returns results sorted by win_rate descending (tiebreak by pp_delta).
+    Returns per-run results sorted by win_rate descending.
+    If ``repeats > 1``, also writes an aggregated summary CSV.
     """
     sweep_cfg = json.loads(Path(sweep_config_path).read_text())
     base_config = json.loads(Path(sweep_cfg["base_config"]).read_text())
@@ -182,21 +249,28 @@ def run_sweep(sweep_config_path: Path, seed: int | None = None) -> list[dict]:
     eval_games = int(sweep_cfg.get("screening_eval_games", 50))
     final_eval_games = int(sweep_cfg.get("final_eval_games", 100))
     max_workers = sweep_cfg.get("max_workers") or os.cpu_count() or 4
+    repeats = int(sweep_cfg.get("repeats", 1))
 
     grid_combos = expand_grid(sweep_cfg["grid"])
-    total_runs = len(grid_combos)
+    total_runs = len(grid_combos) * repeats
     console.print(
-        f"[bold]Sweep:[/bold] {total_runs} configs × {n_games} games, "
-        f"{max_workers} workers"
+        f"[bold]Sweep:[/bold] {len(grid_combos)} configs × {repeats} repeat(s) "
+        f"= {total_runs} runs × {n_games} games, {max_workers} workers"
     )
 
-    # Build argument tuples for each run
+    # Build argument tuples: one per (combo, repeat)
     work_items: list[tuple] = []
-    for run_id, combo in enumerate(grid_combos):
+    run_id = 0
+    for combo_id, combo in enumerate(grid_combos):
         config = {**base_config, **combo, "eval_interval": eval_interval}
-        work_items.append(
-            (run_id, config, n_games, eval_interval, eval_games, final_eval_games, seed)
-        )
+        for repeat in range(repeats):
+            # Each repeat gets a different seed offset
+            run_seed = (seed + run_id) if seed is not None else None
+            work_items.append(
+                (run_id, combo_id, repeat, config, n_games, eval_interval,
+                 eval_games, final_eval_games, run_seed)
+            )
+            run_id += 1
 
     # Shared queue for worker -> parent progress messages
     progress_queue: multiprocessing.Queue = multiprocessing.Queue()
@@ -240,18 +314,23 @@ def run_sweep(sweep_config_path: Path, seed: int | None = None) -> list[dict]:
         progress_queue.put(_POISON)
         reader.join(timeout=5)
 
-    # Sort: best win_rate first, tiebreak by pp_delta
+    # Sort per-run results: best win_rate first, tiebreak by pp_delta
     results.sort(key=lambda r: (-r["win_rate"], -r["pp_delta"]))
-
-    # Assign rank
     for rank, r in enumerate(results, 1):
         r["rank"] = rank
 
-    # Write CSV
-    _write_results_csv(results, sweep_cfg["grid"])
+    swept_keys = list(sweep_cfg["grid"].keys())
 
-    # Print top 5
-    _print_top_results(results)
+    # Write per-run CSV
+    _write_results_csv(results, swept_keys)
+
+    if repeats > 1:
+        # Write aggregated summary CSV and print it
+        aggregated = _aggregate_results(results, swept_keys)
+        _write_summary_csv(aggregated, swept_keys)
+        _print_top_summary(aggregated)
+    else:
+        _print_top_results(results)
 
     return results
 
@@ -260,14 +339,14 @@ def run_sweep(sweep_config_path: Path, seed: int | None = None) -> list[dict]:
 # Output helpers
 # ---------------------------------------------------------------------------
 
-def _write_results_csv(results: list[dict], grid: dict) -> None:
-    """Write sweep results to ``output/sweep_results.csv``."""
+def _write_results_csv(results: list[dict], swept_keys: list[str]) -> None:
+    """Write per-run sweep results to ``output/sweep_results.csv``."""
     Path("output").mkdir(parents=True, exist_ok=True)
     out_path = Path("output") / "sweep_results.csv"
 
-    swept_keys = list(grid.keys())
     fieldnames = [
-        "rank", "run_id", "win_rate", "mean_pp", "pp_delta",
+        "rank", "run_id", "combo_id", "repeat",
+        "win_rate", "mean_pp", "pp_delta",
         "final_epsilon", "elapsed_seconds",
     ] + swept_keys
 
@@ -277,11 +356,30 @@ def _write_results_csv(results: list[dict], grid: dict) -> None:
         for r in results:
             writer.writerow(r)
 
-    console.print(f"\nResults written to [cyan]{out_path}[/cyan]")
+    console.print(f"\nPer-run results written to [cyan]{out_path}[/cyan]")
+
+
+def _write_summary_csv(aggregated: list[dict], swept_keys: list[str]) -> None:
+    """Write aggregated summary to ``output/sweep_summary.csv``."""
+    out_path = Path("output") / "sweep_summary.csv"
+
+    fieldnames = [
+        "rank", "combo_id", "repeats",
+        "mean_win_rate", "std_win_rate", "min_win_rate", "max_win_rate",
+        "mean_pp_delta", "std_pp_delta", "mean_pp",
+    ] + swept_keys
+
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for r in aggregated:
+            writer.writerow(r)
+
+    console.print(f"Summary results written to [cyan]{out_path}[/cyan]")
 
 
 def _print_top_results(results: list[dict], n: int = 5) -> None:
-    """Print a rich table of the top *n* results."""
+    """Print a rich table of the top *n* per-run results."""
     table = Table(title=f"Top {min(n, len(results))} Sweep Results")
     table.add_column("Rank", style="bold", justify="right")
     table.add_column("Run", justify="right")
@@ -302,6 +400,37 @@ def _print_top_results(results: list[dict], n: int = 5) -> None:
             f"{r['pp_delta']:+.1f}",
             f"{r['mean_pp']:.1f}",
             f"{r['elapsed_seconds']:.0f}",
+            str(r.get("alpha", "")),
+            str(r.get("gamma", "")),
+            str(r.get("epsilon_decay_games", "")),
+            str(r.get("weight_decay", "")),
+        )
+
+    console.print(table)
+
+
+def _print_top_summary(aggregated: list[dict], n: int = 10) -> None:
+    """Print a rich table of the top *n* aggregated combos."""
+    table = Table(title=f"Top {min(n, len(aggregated))} Configs (averaged across repeats)")
+    table.add_column("Rank", style="bold", justify="right")
+    table.add_column("Combo", justify="right")
+    table.add_column("Mean WR", justify="right", style="green")
+    table.add_column("Std WR", justify="right", style="dim")
+    table.add_column("Range WR", justify="right")
+    table.add_column("Mean PPD", justify="right", style="cyan")
+    table.add_column("alpha", justify="right")
+    table.add_column("gamma", justify="right")
+    table.add_column("eps_decay", justify="right")
+    table.add_column("w_decay", justify="right")
+
+    for r in aggregated[:n]:
+        table.add_row(
+            str(r["rank"]),
+            str(r["combo_id"]),
+            f"{r['mean_win_rate']:.3f}",
+            f"{r['std_win_rate']:.3f}",
+            f"{r['min_win_rate']:.2f}–{r['max_win_rate']:.2f}",
+            f"{r['mean_pp_delta']:+.1f}",
             str(r.get("alpha", "")),
             str(r.get("gamma", "")),
             str(r.get("epsilon_decay_games", "")),
@@ -345,10 +474,14 @@ def main() -> None:
     sweep_cfg = json.loads(Path(args.config).read_text())
     grid_combos = expand_grid(sweep_cfg["grid"])
     max_workers = sweep_cfg.get("max_workers") or os.cpu_count() or 4
+    repeats = int(sweep_cfg.get("repeats", 1))
+    total_runs = len(grid_combos) * repeats
 
     console.print(f"[bold]Hyperparameter Sweep[/bold]")
     console.print(f"  Base config: {sweep_cfg['base_config']}")
     console.print(f"  Grid size:   {len(grid_combos)} combinations")
+    console.print(f"  Repeats:     {repeats}")
+    console.print(f"  Total runs:  {total_runs}")
     console.print(f"  Workers:     {max_workers} (CPU cores)")
     console.print(f"  Games/run:   {sweep_cfg.get('screening_games', 2000)}")
     console.print(f"  Eval every:  {sweep_cfg.get('screening_eval_interval', 500)} games")
