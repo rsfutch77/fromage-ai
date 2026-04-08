@@ -15,3 +15,5 @@ models/
 output/
 .pytest_cache/
 .mypy_cache/
+output-2
+output-old

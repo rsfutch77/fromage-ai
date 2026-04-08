@@ -2,7 +2,7 @@
   "epsilon_start": 1.0,
   "epsilon_end": 0.05,
   "epsilon_decay_games": 5000,
-  "alpha": 0.005,
+  "alpha": 0.001,
   "gamma": 0.9,
   "weight_decay": 1e-6,
   "model_save_dir": "models/",
