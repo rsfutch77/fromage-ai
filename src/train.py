@@ -78,6 +78,12 @@ def _parse_args() -> argparse.Namespace:
         default=False,
         help="[Milestone 9] Generate learning-performance charts after training.",
     )
+    parser.add_argument(
+        "--model",
+        type=Path,
+        default=None,
+        help="Load a saved model (.npz) instead of training. Skips training, goes straight to evaluation and charts.",
+    )
     return parser.parse_args()
 
 
@@ -151,12 +157,17 @@ def main() -> None:
         random.seed(args.seed)
 
     data = GameDataLoader()
-    console.print(f"[bold]Training QAgent[/bold] — {args.games} games, config: {args.config}")
 
-    agent = train(n_games=args.games, data=data, config_path=args.config)
+    if args.model is not None:
+        from src.ai.q_agent import QAgent
+        console.print(f"[bold]Loading model[/bold] from {args.model}")
+        agent = QAgent.load(args.model, data)
+    else:
+        console.print(f"[bold]Training QAgent[/bold] — {args.games} games, config: {args.config}")
+        agent = train(n_games=args.games, data=data, config_path=args.config)
 
     console.print(
-        f"\n[bold green]Training complete.[/bold green] "
+        f"\n[bold green]{'Model loaded' if args.model else 'Training complete'}.[/bold green] "
         f"Running final evaluation ({args.eval_games} games)…"
     )
 

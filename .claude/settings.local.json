@@ -13,7 +13,8 @@
       "Bash(python -m pytest tests/test_training.py -v --tb=short)",
       "Bash(python -m pytest tests/test_state_encoder.py -v)",
       "Bash(python -m pytest -v)",
-      "Bash(python -m pytest tests/test_board.py -v)"
+      "Bash(python -m pytest tests/test_board.py -v)",
+      "Bash(python -m pytest tests/test_training.py -q)"
     ]
   }
 }
