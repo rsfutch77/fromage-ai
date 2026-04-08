@@ -91,6 +91,25 @@ class QAgent(Agent):
         q_values = [self._q_value(state_vec, i) for i in range(len(legal))]
         return legal[int(np.argmax(q_values))]
 
+    def choose_action_with_info(
+        self, state: GameState, player_id: int,
+    ) -> tuple[TurnAction, np.ndarray, int, int]:
+        """Return (action, state_vec, action_idx, n_legal) with cached info for training.
+
+        Always computes the state encoding (even on random picks) so the
+        caller can store it for the TD update without re-encoding later.
+        """
+        legal = all_legal_turn_actions(state, player_id, self._data)
+        if not legal:
+            return TurnAction(), np.zeros(self._state_size, dtype=np.float32), 0, 0
+        state_vec = encode_state(state, player_id, self._data, enhanced=self._enhanced_encoder)
+        if self._rng.random() < self._epsilon:
+            idx = self._rng.randrange(len(legal))
+            return legal[idx], state_vec, idx, len(legal)
+        q_values = [self._q_value(state_vec, i) for i in range(len(legal))]
+        idx = int(np.argmax(q_values))
+        return legal[idx], state_vec, idx, len(legal)
+
     def update(
         self,
         state: GameState,
@@ -110,9 +129,20 @@ class QAgent(Agent):
         next_state_vec = encode_state(next_state, player_id, self._data, enhanced=self._enhanced_encoder)
 
         legal_next = all_legal_turn_actions(next_state, player_id, self._data)
-        if legal_next:
+        self.update_precomputed(state_vec, action_idx, reward, next_state_vec, len(legal_next))
+
+    def update_precomputed(
+        self,
+        state_vec: np.ndarray,
+        action_idx: int,
+        reward: float,
+        next_state_vec: np.ndarray,
+        n_legal_next: int,
+    ) -> None:
+        """TD(0) update using pre-computed state vectors (avoids re-encoding)."""
+        if n_legal_next > 0:
             max_q_next = max(
-                self._q_value(next_state_vec, i) for i in range(len(legal_next))
+                self._q_value(next_state_vec, i) for i in range(n_legal_next)
             )
         else:
             max_q_next = 0.0

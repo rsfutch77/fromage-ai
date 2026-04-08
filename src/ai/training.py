@@ -32,10 +32,13 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
 
 from src.ai.q_agent import QAgent
 from src.ai.random_agent import RandomAgent
+from src.ai.state_encoder import encode_state
+from src.game.actions import all_legal_turn_actions
 from src.game.board import retrieve_workers, rotate_board, setup_game
 from src.game.engine import apply_turn
 from src.game.scoring import (
@@ -51,7 +54,6 @@ from src.game.scoring import (
 from src.game.simulation import MAX_TURNS_PER_GAME, run_game
 
 if TYPE_CHECKING:
-    from src.game.actions import TurnAction
     from src.game.data_loader import GameDataLoader
     from src.game.state import GameState
 
@@ -60,8 +62,8 @@ logger = logging.getLogger(__name__)
 EVAL_INTERVAL: int = 500
 CHECKPOINT_INTERVAL: int = 1000
 
-# (pre_state, player_id, action, post_state, intermediate_reward)
-_Transition = tuple["GameState", int, "TurnAction", "GameState", float]
+# (player_id, state_vec, action_idx, next_state_vec, n_legal_next, intermediate_reward)
+_Transition = tuple[int, np.ndarray, int, np.ndarray, int, float]
 
 
 def train(n_games: int, data: "GameDataLoader", config_path: Path) -> QAgent:
@@ -211,12 +213,12 @@ def _run_training_game(
     data: "GameDataLoader",
     seed: int | None = None,
 ) -> tuple[list[_Transition], list[ScoreBreakdown]]:
-    """Run one self-play game collecting transitions with intermediate rewards.
+    """Run one self-play game collecting transitions with pre-computed vectors.
 
     Returns ``(transitions, scores)`` where each transition is
-    ``(pre_state, player_id, action, post_state, intermediate_reward)``.
-    The intermediate reward is the partial score delta for that placement
-    (Festival + Fromagerie + Bistro + Orders + Fruit — Villes excluded).
+    ``(player_id, state_vec, action_idx, next_state_vec, n_legal_next, reward)``.
+    State encodings and action indices are cached during gameplay so the
+    update phase can skip expensive re-encoding and legal-action enumeration.
     """
     state = setup_game(data, seed)
     transitions: list[_Transition] = []
@@ -226,10 +228,15 @@ def _run_training_game(
         state = retrieve_workers(state)
         for player_id in range(4):
             pre_state = state
-            action = agent.choose_action(state, player_id)
+            action, state_vec, action_idx, _n_legal = agent.choose_action_with_info(state, player_id)
             state = apply_turn(state, player_id, action, data)
             intermediate_reward = _compute_placement_reward(pre_state, state, player_id, data)
-            transitions.append((pre_state, player_id, action, state, intermediate_reward))
+
+            # Pre-compute next-state info for this player's TD update
+            next_state_vec = encode_state(state, player_id, data, enhanced=agent._enhanced_encoder)
+            next_legal = all_legal_turn_actions(state, player_id, data)
+
+            transitions.append((player_id, state_vec, action_idx, next_state_vec, len(next_legal), intermediate_reward))
         state = rotate_board(state)
         state.turn_number += 1
         if state.game_end_triggered:
@@ -286,7 +293,7 @@ def _apply_updates(
     transitions: list[_Transition],
     scores: list[ScoreBreakdown],
 ) -> None:
-    """Apply TD(0) updates in reverse chronological order for each player.
+    """Apply TD(0) updates in reverse chronological order using pre-computed vectors.
 
     Terminal reward (last transition): score_total + tokens_placed / 16.
     Intermediate transitions: use the stored potential-based shaping reward.
@@ -299,16 +306,16 @@ def _apply_updates(
     # Group transitions by player, preserving chronological order
     by_player: dict[int, list[_Transition]] = {pid: [] for pid in range(4)}
     for t in transitions:
-        by_player[t[1]].append(t)
+        by_player[t[0]].append(t)
 
     for pid, player_transitions in by_player.items():
         terminal_reward = terminal_rewards[pid]
-        for i, (pre_state, player_id, action, post_state, shaping_reward) in enumerate(
+        for i, (_pid, state_vec, action_idx, next_state_vec, n_legal_next, shaping_reward) in enumerate(
             reversed(player_transitions)
         ):
             # i == 0 is the chronologically last transition
             r = terminal_reward if i == 0 else shaping_reward
-            agent.update(pre_state, player_id, action, r, post_state)
+            agent.update_precomputed(state_vec, action_idx, r, next_state_vec, n_legal_next)
 
 
 def _std(values: list[float]) -> float:
