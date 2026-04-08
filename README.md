@@ -11,7 +11,7 @@ Players compete across four venues (Fromagerie, Bistro, Villes, Festival) by pla
 Make sure you have enough fruit to place gold cheese in Villes, then use less aged cheese elsewhere so you can dominate the villes when it comes around. Livestock are also useful to grab important bonuses. Don't worry about using structures much.
 
 <p align="center">
-  <img src="output/plots/chart_02_points_per_venue.png" alt="Points per Venue" width="420"/>
+  <img src="output/plots/chart_08_board_venue_heatmap.png" alt="Board Venue Heatmap" width="420"/>
   &nbsp;&nbsp;
   <img src="output/plots/chart_07_winner_vs_loser_radar.png" alt="Winner vs Loser Radar" width="420"/>
   &nbsp;&nbsp;
