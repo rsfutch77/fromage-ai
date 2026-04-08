@@ -403,30 +403,58 @@ def plot_parlour_usage_vs_win_rate(db: "ResultsDB", out_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def plot_villes_region_control(db: "ResultsDB", out_dir: Path) -> None:
-    rows = db.fetch_villes_control()
+    rows = db.fetch_token_assignments()
     if not _check_min(rows, "13 villes_region_control"):
         return
 
-    regions = sorted({r["region"] for r in rows})
-    control_rates, win_rates = [], []
-    for region in regions:
-        subset = [r for r in rows if r["region"] == region]
+    # Colour palette keyed by region name (consistent with other villes charts)
+    region_colours = {
+        "blue": "#2196F3", "green": "#4CAF50", "pink": "#E91E63",
+        "purple": "#9C27B0", "white": "#9E9E9E", "yellow": "#FFC107",
+    }
+
+    # Group by (region_name, win_value)
+    combos: dict[tuple[str, int], list[dict]] = defaultdict(list)
+    for r in rows:
+        combos[(r["region_name"], r["win_value"])].append(r)
+
+    # Bubble size scaling: map win_value to visual area
+    _SIZE_MAP = {7: 80, 8: 200, 9: 400}
+
+    fig, ax = plt.subplots(figsize=(9, 7))
+    plotted_regions: set[str] = set()
+
+    for (region, wv), subset in combos.items():
         controlled = [r for r in subset if r["controlling_player"] != -1]
-        control_rates.append(len(controlled) / len(subset) if subset else 0)
-        win_rates.append(
-            np.mean([r["controller_is_winner"] for r in controlled]) if controlled else 0
+        control_rate = len(controlled) / len(subset) if subset else 0
+        win_rate = (
+            np.mean([r["controller_is_winner"] for r in controlled])
+            if controlled else 0
+        )
+        colour = region_colours.get(region, "#607D8B")
+        label = region if region not in plotted_regions else None
+        plotted_regions.add(region)
+
+        ax.scatter(
+            control_rate, win_rate,
+            s=_SIZE_MAP.get(wv, 150),
+            c=colour, alpha=0.8, edgecolors="black", linewidths=0.5,
+            label=label,
+        )
+        ax.annotate(
+            f"{region}\n({wv} pts)",
+            (control_rate, win_rate),
+            textcoords="offset points", xytext=(0, 10),
+            ha="center", fontsize=7,
         )
 
-    x = np.arange(len(regions))
-    width = 0.35
-    fig, ax = plt.subplots(figsize=(9, 4))
-    ax.bar(x - width / 2, control_rates, width, label="Control rate", color="#42A5F5")
-    ax.bar(x + width / 2, win_rates, width, label="Win rate (controllers)", color="#FF7043")
-    ax.set_xticks(x)
-    ax.set_xticklabels(regions, rotation=30, ha="right")
-    ax.set_ylabel("Rate")
-    ax.set_title("Villes region control rate and win correlation")
-    ax.legend()
+    ax.axhline(0.25, color="red", linestyle="--", linewidth=0.8, label="Random baseline")
+    ax.set_xlabel("How often controlled")
+    ax.set_ylabel("Win rate when controlled")
+    ax.set_xlim(-0.05, 1.05)
+    ax.set_ylim(-0.05, 1.05)
+    ax.set_title("Villes region value vs control outcome")
+    ax.legend(loc="upper left", fontsize=8)
     fig.tight_layout()
     _save(fig, out_dir, "chart_13_villes_region_control.png")
 

@@ -9,6 +9,7 @@ See requirements section 6.
 from __future__ import annotations
 
 import logging
+import random
 from dataclasses import dataclass
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
@@ -183,6 +184,8 @@ def run_game(
     Uses *seed* for reproducible setup and (if agents use it) move selection.
     Returns a GameResult with full score breakdowns and winner list.
     """
+    if seed is None:
+        seed = random.randrange(2**31)
     state = setup_game(data, seed)
     turns = 0
 

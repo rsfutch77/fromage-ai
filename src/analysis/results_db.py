@@ -77,6 +77,15 @@ CREATE TABLE IF NOT EXISTS villes_control (
 )
 """
 
+_CREATE_TOKEN_ASSIGNMENTS = """
+CREATE TABLE IF NOT EXISTS token_assignments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_id     INTEGER NOT NULL REFERENCES games(game_id),
+    region_name TEXT    NOT NULL,
+    win_value   INTEGER NOT NULL
+)
+"""
+
 # Safe migrations for existing DBs (new columns only; try/except swallows
 # "duplicate column name" errors from sqlite3).
 _MIGRATE_SCORES = [
@@ -114,6 +123,7 @@ class ResultsDB:
             conn.execute(_CREATE_SCORES)
             conn.execute(_CREATE_PLACED_CHEESE)
             conn.execute(_CREATE_VILLES_CONTROL)
+            conn.execute(_CREATE_TOKEN_ASSIGNMENTS)
             for stmt in _MIGRATE_SCORES:
                 try:
                     conn.execute(stmt)
@@ -192,6 +202,14 @@ class ResultsDB:
                     (game_id, region, holder if holder is not None else -1),
                 )
 
+            for token in result.final_state.customer_tokens:
+                conn.execute(
+                    "INSERT INTO token_assignments"
+                    " (game_id, region_name, win_value)"
+                    " VALUES (?, ?, ?)",
+                    (game_id, token.region_name, token.win_value),
+                )
+
     # ------------------------------------------------------------------
     # Read
     # ------------------------------------------------------------------
@@ -255,6 +273,36 @@ class ResultsDB:
             " JOIN games g ON g.game_id = vc.game_id"
             " LEFT JOIN scores s"
             "        ON s.game_id = vc.game_id"
+            "       AND s.player_id = vc.controlling_player"
+        )
+        params: tuple = ()
+        if agent_config is not None:
+            sql += " WHERE g.agent_config = ?"
+            params = (agent_config,)
+
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(sql, params).fetchall()
+
+        return [dict(row) for row in rows]
+
+    def fetch_token_assignments(self, agent_config: str | None = None) -> list[dict]:
+        """Return token_assignments rows joined with villes_control and winner info.
+
+        Each row contains: game_id, region_name, win_value, controlling_player,
+        controller_is_winner.
+        """
+        sql = (
+            "SELECT ta.game_id, ta.region_name, ta.win_value,"
+            "       vc.controlling_player,"
+            "       CASE WHEN vc.controlling_player = -1 THEN 0"
+            "            ELSE s.is_winner END AS controller_is_winner"
+            " FROM token_assignments ta"
+            " JOIN games g ON g.game_id = ta.game_id"
+            " JOIN villes_control vc"
+            "   ON vc.game_id = ta.game_id AND vc.region = ta.region_name"
+            " LEFT JOIN scores s"
+            "        ON s.game_id = ta.game_id"
             "       AND s.player_id = vc.controlling_player"
         )
         params: tuple = ()

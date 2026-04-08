@@ -47,10 +47,10 @@ def test_run_batch_seeds_differ(data):
 
 
 def test_run_batch_no_seed(data):
-    """run_batch without base_seed produces results with seed=None."""
+    """run_batch without base_seed still generates a seed for each game."""
     results = run_batch(3, _agents(data), data, base_seed=None)
     for r in results:
-        assert r.seed is None
+        assert isinstance(r.seed, int)
 
 
 def test_run_batch_reproducible(data):
