@@ -33,7 +33,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--games",
         type=int,
-        default=8000,
+        default=6000,
         help="Number of self-play training games (default: 8000)",
     )
     parser.add_argument(
@@ -57,7 +57,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--eval-games",
         type=int,
-        default=100,
+        default=500,
         help="Games to run for final evaluation (and chart generation if --charts). Default: 100.",
     )
     parser.add_argument(
