@@ -1,0 +1,12 @@
+{"game": 500, "epsilon": 0.9052, "win_rate": 0.28, "mean_score": 45.42, "std_score": 4.76, "pp_delta": 2.23}
+{"game": 1000, "epsilon": 0.8102, "win_rate": 0.28, "mean_score": 44.48, "std_score": 4.55, "pp_delta": 2.23}
+{"game": 1500, "epsilon": 0.7152, "win_rate": 0.28, "mean_score": 44.22, "std_score": 4.25, "pp_delta": 2.23}
+{"game": 2000, "epsilon": 0.6202, "win_rate": 0.3, "mean_score": 43.55, "std_score": 4.08, "pp_delta": 2.83}
+{"game": 2500, "epsilon": 0.5252, "win_rate": 0.3, "mean_score": 42.07, "std_score": 3.95, "pp_delta": 2.83}
+{"game": 3000, "epsilon": 0.4302, "win_rate": 0.3, "mean_score": 41.22, "std_score": 3.78, "pp_delta": 2.83}
+{"game": 3500, "epsilon": 0.3352, "win_rate": 0.3, "mean_score": 40.81, "std_score": 3.68, "pp_delta": 2.83}
+{"game": 4000, "epsilon": 0.2402, "win_rate": 0.3, "mean_score": 40.19, "std_score": 3.54, "pp_delta": 2.83}
+{"game": 4500, "epsilon": 0.1452, "win_rate": 0.3, "mean_score": 39.85, "std_score": 3.54, "pp_delta": 2.83}
+{"game": 5000, "epsilon": 0.0502, "win_rate": 0.3, "mean_score": 39.71, "std_score": 3.46, "pp_delta": 2.83}
+{"game": 5500, "epsilon": 0.05, "win_rate": 0.3, "mean_score": 39.85, "std_score": 3.55, "pp_delta": 2.83}
+{"game": 6000, "epsilon": 0.05, "win_rate": 0.3, "mean_score": 40.01, "std_score": 3.4, "pp_delta": 2.83}

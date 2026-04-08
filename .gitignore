@@ -12,7 +12,5 @@ venv/
 *.db
 *.sqlite3
 models/
-output/
 .pytest_cache/
 .mypy_cache/
-output*

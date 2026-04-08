@@ -1,0 +1,12 @@
+signal,value,unit,threshold,status,recommendation
+epsilon_final,0.0500,,<= 0.05,OK,Epsilon has reached floor.
+epsilon_floor,0.0500,,<= 0.05,OK,Floor reached.
+games_to_epsilon_floor,5500,games,,OK,Floor reached at game 5500.
+win_rate_final,0.3000,,> 0.30 OK; > 0.25 WARN; else CRIT,WARN,Agent is near or below random baseline.
+win_rate_peak,0.3000,,> 0.30,WARN,Peak win rate is low; revise hyperparameters.
+win_rate_plateau_game,500,games,,OK,Win rate plateaued at game 500.
+score_mean_final,40.01,pts,,OK,Final mean score is 40.0.
+score_std_final,3.40,pts,,OK,Score variance is reasonable.
+score_std_trend,↓,,decreasing = OK,OK,Score variance is narrowing (policy converging).
+weight_norm_final,n/a,,,WARN,No checkpoints found.
+weight_norm_delta,n/a,,,WARN,Need at least 2 checkpoints to compute delta.
