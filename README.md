@@ -6,6 +6,9 @@ A reinforcement learning agent that learns to play **Fromage** — a 4-player ch
 
 Players compete across four venues (Fromagerie, Bistro, Villes, Festival) by placing cheese tokens, fulfilling orders, and managing resources. The AI agent learns entirely through self-play against copies of itself, using a linear Q-function over a 292-dimensional state encoding. No deep learning frameworks are used — just numpy. Included is a hyperparameter sweep function to automatically determine the best training parameters. The system also takes advantage of multi-threading for quick training.
 
+## Headline Results
+Make sure you have enough fruit to place gold cheese in Villes, then use less aged cheese elsewhere so you can dominate the villes when it comes around. Livestock are also useful to grab important bonuses. Don't worry about using structures much. 
+
 ### How it works
 
 - **State encoder** converts the full game state (board positions, scores, resources, opponents) into a 292-feature vector
