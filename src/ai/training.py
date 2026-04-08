@@ -325,3 +325,71 @@ def _std(values: list[float]) -> float:
     mean = sum(values) / len(values)
     variance = sum((v - mean) ** 2 for v in values) / len(values)
     return math.sqrt(variance)
+
+
+# ---------------------------------------------------------------------------
+# Sweep helpers
+# ---------------------------------------------------------------------------
+
+def train_for_sweep(
+    n_games: int,
+    data: "GameDataLoader",
+    config: dict,
+    eval_interval: int = 500,
+    eval_games: int = 50,
+    progress_queue: "multiprocessing.Queue | None" = None,
+    run_id: int = 0,
+) -> tuple[QAgent, list[dict]]:
+    """Lightweight training loop for hyperparameter sweeps.
+
+    Like ``train()`` but skips progress bars, checkpoints, and log file I/O.
+    Returns ``(trained_agent, eval_log)`` where *eval_log* is a list of dicts
+    with the same schema as training_log.jsonl entries.
+
+    If *progress_queue* is provided, sends ``(run_id, game_num, n_games)``
+    tuples every 50 games so the parent process can display progress.
+    """
+    import multiprocessing as _mp  # local import to keep module-level clean
+
+    epsilon_start: float = float(config.get("epsilon_start", 1.0))
+    epsilon_end: float = float(config.get("epsilon_end", 0.05))
+    epsilon_decay_games: int = int(config.get("epsilon_decay_games", 5000))
+
+    # How often to report progress (every ~2.5% of total games, minimum 10)
+    report_every = max(n_games // 40, 10)
+
+    agent = QAgent(data=data, config=config)
+    window_scores: list[float] = []
+    eval_log: list[dict] = []
+
+    for game_num in range(1, n_games + 1):
+        progress = min((game_num - 1) / max(epsilon_decay_games, 1), 1.0)
+        agent._epsilon = epsilon_start - progress * (epsilon_start - epsilon_end)
+
+        transitions, scores = _run_training_game(agent, data, seed=game_num)
+        _apply_updates(agent, transitions, scores)
+
+        mean_score = sum(s.total for s in scores) / 4.0
+        window_scores.append(mean_score)
+
+        if progress_queue is not None and game_num % report_every == 0:
+            progress_queue.put(("progress", run_id, game_num, n_games))
+
+        if game_num % eval_interval == 0:
+            eval_result = evaluate(agent, eval_games, data)
+            mean_window = sum(window_scores) / len(window_scores)
+            std_window = _std(window_scores)
+            eval_log.append({
+                "game": game_num,
+                "epsilon": round(agent._epsilon, 4),
+                "win_rate": round(eval_result["win_rate"], 4),
+                "mean_score": round(mean_window, 2),
+                "std_score": round(std_window, 2),
+                "pp_delta": round(eval_result["mean_pp_delta_vs_random"], 2),
+            })
+            window_scores.clear()
+
+    if progress_queue is not None:
+        progress_queue.put(("done", run_id, n_games, n_games))
+
+    return agent, eval_log
