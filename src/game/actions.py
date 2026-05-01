@@ -69,6 +69,8 @@ class MakeCheeseAction:
     space_id: int | None = None   # Fromagerie / Villes / Bistro
     row: int | None = None        # Festival
     col: int | None = None        # Festival
+    resource_to_give: ResourceType | None = None
+    resource_to_receive: ResourceType | None = None
 
 
 @dataclass
@@ -320,12 +322,18 @@ def _is_affordable(
             return False
 
     # Make-cheese fruit costs (one per action with a fruit requirement)
+    # and resource swap costs/gains from trade_resource_for_any
     for mc in make_cheese:
         fr = _fruit_req_for_action(mc, data)
         if fr != FruitRequirement.NONE:
             avail[ResourceType.FRUIT] -= 1
             if avail[ResourceType.FRUIT] < 0:
                 return False
+        if mc.resource_to_give is not None and mc.resource_to_receive is not None:
+            avail[mc.resource_to_give] = avail.get(mc.resource_to_give, 0) - 1
+            if avail[mc.resource_to_give] < 0:
+                return False
+            avail[mc.resource_to_receive] = avail.get(mc.resource_to_receive, 0) + 1
 
     # Milking parlour livestock + fruit costs
     parlour_map = {p.parlour_num: p for p in data.milking_parlours
@@ -414,10 +422,39 @@ def legal_make_cheese_actions(
     def _has_fruit(req: FruitRequirement) -> bool:
         return req == FruitRequirement.NONE or effective_fruit >= 1
 
+    _SWAPPABLE = [ResourceType.FRUIT, ResourceType.LIVESTOCK, ResourceType.STRUCTURE]
+
     if facing_venue == VenueType.FROMAGERIE:
         for sp in data.fromagerie_spaces:
             if _frm_key(sp.space_id) not in occupied and sp.cheese_type in workers_in_hand and _has_fruit(sp.fruit_requirement):
-                actions.append(MakeCheeseAction(venue=VenueType.FROMAGERIE, worker_type=sp.cheese_type, space_id=sp.space_id))
+                shelf = next(sh for sh in data.fromagerie_shelves if sh.shelf_id == sp.shelf_id)
+                if shelf.immediate_bonus == "trade_resource_for_any":
+                    # Compute fruit available after paying the space's fruit cost.
+                    fruit_after_cost = effective_fruit - (1 if sp.fruit_requirement != FruitRequirement.NONE else 0)
+                    has_any_swap = False
+                    for give in _SWAPPABLE:
+                        available = player.resources.get(give, 0)
+                        if give == ResourceType.FRUIT:
+                            available = fruit_after_cost
+                        if available < 1:
+                            continue
+                        for receive in _SWAPPABLE:
+                            if receive == give:
+                                continue
+                            has_any_swap = True
+                            actions.append(MakeCheeseAction(
+                                venue=VenueType.FROMAGERIE, worker_type=sp.cheese_type,
+                                space_id=sp.space_id,
+                                resource_to_give=give, resource_to_receive=receive,
+                            ))
+                    if not has_any_swap:
+                        # Fallback: player cannot swap, emit no-swap action.
+                        actions.append(MakeCheeseAction(
+                            venue=VenueType.FROMAGERIE, worker_type=sp.cheese_type,
+                            space_id=sp.space_id,
+                        ))
+                else:
+                    actions.append(MakeCheeseAction(venue=VenueType.FROMAGERIE, worker_type=sp.cheese_type, space_id=sp.space_id))
     elif facing_venue == VenueType.BISTRO:
         for sp in data.bistro_spaces:
             if _bis_key(sp.space_id) not in occupied and sp.cheese_type in workers_in_hand and _has_fruit(sp.fruit_requirement):

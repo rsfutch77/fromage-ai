@@ -522,6 +522,54 @@ def test_make_cheese_raises_when_no_tokens_remaining(data, state):
         apply_make_cheese(new, 0, action, data)
 
 
+# ---------------------------------------------------------------------------
+# Fromagerie shelf 1 swap (trade_resource_for_any)
+# ---------------------------------------------------------------------------
+
+def test_fromagerie_shelf_bonus_trade_resource_for_any(data, state):
+    """Swap: give 1 STRUCTURE, receive 1 LIVESTOCK on shelf 1."""
+    new = copy.deepcopy(state)
+    new = _force_fromagerie(new, data)
+    player = new.players[0]
+    _give_all_workers_in_hand(player)
+
+    # Shelf 1 spaces are space_id 1, 2, 3.  Pick space 1 (Soft, Bronze, no fruit).
+    sp = next(s for s in data.fromagerie_spaces if s.space_id == 1)
+    player.resources[ResourceType.FRUIT] = 5
+    player.resources[ResourceType.STRUCTURE] = 3
+    player.resources[ResourceType.LIVESTOCK] = 0
+
+    action = MakeCheeseAction(
+        venue=VenueType.FROMAGERIE, worker_type=sp.cheese_type, space_id=sp.space_id,
+        resource_to_give=ResourceType.STRUCTURE, resource_to_receive=ResourceType.LIVESTOCK,
+    )
+    new2 = apply_make_cheese(new, 0, action, data)
+    assert new2.players[0].resources[ResourceType.STRUCTURE] == 2  # 3 - 1
+    assert new2.players[0].resources[ResourceType.LIVESTOCK] >= 1  # 0 + 1 (greenhouse may add more)
+
+
+def test_fromagerie_swap_no_op_when_fields_none(data, state):
+    """No resource change from swap when give/receive are None."""
+    new = copy.deepcopy(state)
+    new = _force_fromagerie(new, data)
+    player = new.players[0]
+    _give_all_workers_in_hand(player)
+
+    sp = next(s for s in data.fromagerie_spaces if s.space_id == 1)
+    player.resources[ResourceType.FRUIT] = 5
+    player.resources[ResourceType.STRUCTURE] = 3
+    player.resources[ResourceType.LIVESTOCK] = 2
+
+    action = MakeCheeseAction(
+        venue=VenueType.FROMAGERIE, worker_type=sp.cheese_type, space_id=sp.space_id,
+        resource_to_give=None, resource_to_receive=None,
+    )
+    new2 = apply_make_cheese(new, 0, action, data)
+    # Structure and livestock should be unchanged by the swap
+    assert new2.players[0].resources[ResourceType.STRUCTURE] == 3
+    assert new2.players[0].resources[ResourceType.LIVESTOCK] == 2
+
+
 def test_milking_parlour_raises_when_insufficient_livestock(data, state):
     """apply_milking_parlour raises IllegalActionError if livestock is insufficient."""
     new = copy.deepcopy(state)

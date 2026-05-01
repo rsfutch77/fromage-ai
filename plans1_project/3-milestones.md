@@ -529,17 +529,17 @@ engine (`engine.py: _apply_fromagerie_shelf_bonus`).
 
 ### Required changes (in order)
 
-- [ ] Add `resource_to_give: ResourceType | None` and
+- [x] Add `resource_to_give: ResourceType | None` and
       `resource_to_receive: ResourceType | None` optional fields to
       `MakeCheeseAction` in `src/game/actions.py`.
-- [ ] In `legal_make_cheese_actions`, when the target space resolves to shelf 1,
+- [x] In `legal_make_cheese_actions`, when the target space resolves to shelf 1,
       emit one action variant per valid (give, receive) pair (give ≠ receive,
       player must hold at least 1 of the given resource).
-- [ ] Implement the swap in `engine.py: _apply_fromagerie_shelf_bonus`:
+- [x] Implement the swap in `engine.py: _apply_fromagerie_shelf_bonus`:
       deduct 1 of `resource_to_give`, gain 1 of `resource_to_receive`.
-- [ ] Add one-hot features for `resource_to_give` and `resource_to_receive` to
+- [x] Add one-hot features for `resource_to_give` and `resource_to_receive` to
       the action encoder (Q(s,a) must distinguish swap variants).
-- [ ] Update `tests/test_engine.py` and `tests/test_actions.py` to cover the
+- [x] Update `tests/test_engine.py` and `tests/test_actions.py` to cover the
       swap mechanic.
 
 Note: The state vector already includes self resource counts (fruit, livestock,

@@ -6,11 +6,10 @@ Handles triggered effects: Greenhouse, Loading Dock, order completion.
 
 See requirements section 4.
 
-NOTE — Fromagerie resource-bonus shelf bonuses (trade_resource_for_any,
-gain_1_resource_any, gain_2_diff_resources) require player choices that are
-not encoded in MakeCheeseAction.  In this simulation these are handled with a
-deterministic fallback (see _apply_fromagerie_shelf_bonus).  The choices can
-be exposed to a UI in a later milestone.
+NOTE — Fromagerie resource-bonus shelf bonuses (gain_1_resource_any,
+gain_2_diff_resources) use a deterministic fallback (see
+_apply_fromagerie_shelf_bonus).  trade_resource_for_any is fully
+implemented via MakeCheeseAction.resource_to_give/resource_to_receive.
 """
 
 from __future__ import annotations
@@ -166,6 +165,7 @@ def _apply_fromagerie_shelf_bonus(
     shelf: FromagerieShelf,
     data: GameDataLoader,
     ctx: _TurnCtx,
+    action: MakeCheeseAction | None = None,
 ) -> None:
     """Apply the immediate bonus for a resource-bonus Fromagerie shelf.
 
@@ -183,13 +183,11 @@ def _apply_fromagerie_shelf_bonus(
         _gain_resource_inplace(state, player_id, ResourceType.STRUCTURE, 1, data, ctx)
         _gain_resource_inplace(state, player_id, ResourceType.LIVESTOCK, 1, data, ctx)
     elif bonus == "trade_resource_for_any":
-        # TODO (stretch goal): implement the swap properly.
-        # Requires a player choice (which resource to give up, which to receive).
-        # MakeCheeseAction would need a resource_to_give/resource_to_receive field,
-        # legal_make_cheese_actions would need to emit variants per valid give/take pair,
-        # and the action encoder would need to include those fields as explicit features.
-        # For now: skipped with no net resource change.
-        pass
+        if action is not None and action.resource_to_give is not None and action.resource_to_receive is not None:
+            player = state.players[player_id]
+            if player.resources.get(action.resource_to_give, 0) >= 1:
+                player.resources[action.resource_to_give] -= 1
+                _gain_resource_inplace(state, player_id, action.resource_to_receive, 1, data, ctx)
     else:
         logger.warning("Unknown Fromagerie shelf bonus '%s' — ignored", bonus)
 
@@ -407,7 +405,7 @@ def _apply_make_cheese_inplace(
         # Apply immediate shelf bonus for resource-bonus shelves
         shelf = _get_fromagerie_shelf(data, sp.shelf_id)
         if shelf.column == "resource_bonus":
-            _apply_fromagerie_shelf_bonus(state, player_id, shelf, data, ctx)
+            _apply_fromagerie_shelf_bonus(state, player_id, shelf, data, ctx, action=action)
 
     elif venue == VenueType.BISTRO:
         sp = _get_bistro_space(data, action.space_id)
@@ -514,7 +512,7 @@ def _apply_milking_parlour_inplace(
 
     # Apply Fromagerie shelf bonus if the target was a resource-bonus shelf
     if _fromagerie_shelf is not None and _fromagerie_shelf.column == "resource_bonus":
-        _apply_fromagerie_shelf_bonus(state, player_id, _fromagerie_shelf, data, ctx)
+        _apply_fromagerie_shelf_bonus(state, player_id, _fromagerie_shelf, data, ctx, action=None)
 
 
 def apply_unlock_structure(

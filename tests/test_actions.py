@@ -21,6 +21,7 @@ from src.game.state import GameState, PlayerState, Worker
 from src.game.types import (
     AgeType,
     CheeseType,
+    FruitRequirement,
     ResourceType,
     VenueType,
     WorkerLocation,
@@ -252,3 +253,95 @@ class TestLegalUnlockActions:
         seqs = legal_unlock_actions(state, 0, data)
         for seq in seqs:
             assert all(a.slot <= 4 for a in seq)
+
+
+class TestSwapMechanic:
+    """Tests for shelf 1 (trade_resource_for_any) swap variants."""
+
+    @staticmethod
+    def _force_fromagerie(state):
+        """Rotate until player 0 faces Fromagerie."""
+        from src.game.board import rotate_board
+        while state.venue_facing(0) != VenueType.FROMAGERIE:
+            state = rotate_board(state)
+        return state
+
+    def test_shelf1_emits_swap_variants(self, data):
+        """Shelf 1 spaces produce multiple (give, receive) variants."""
+        import copy
+        state = setup_game(data, seed=42)
+        state = copy.deepcopy(state)
+        state = self._force_fromagerie(state)
+        player = state.players[0]
+        for w in player.workers:
+            w.location = WorkerLocation.IN_HAND
+            w.venue = None
+            w.space_id = None
+            w.return_after_rotation = None
+        player.resources[ResourceType.FRUIT] = 5
+        player.resources[ResourceType.LIVESTOCK] = 3
+        player.resources[ResourceType.STRUCTURE] = 3
+
+        actions = legal_make_cheese_actions(state, 0, data)
+        shelf1_space_ids = {s.space_id for s in data.fromagerie_spaces if s.shelf_id == 1}
+        shelf1_actions = [a for a in actions if a is not None and a.space_id in shelf1_space_ids]
+
+        # For each shelf 1 space, there should be multiple swap variants
+        for sid in shelf1_space_ids:
+            variants = [a for a in shelf1_actions if a.space_id == sid]
+            sp = next(s for s in data.fromagerie_spaces if s.space_id == sid)
+            if sp.cheese_type not in {w.cheese_type for w in player.workers if w.location == WorkerLocation.IN_HAND}:
+                continue
+            if sp.fruit_requirement != FruitRequirement.NONE and player.resources.get(ResourceType.FRUIT, 0) < 1:
+                continue
+            # Player has 3 swappable resources, so 3 * 2 = 6 variants per space
+            assert len(variants) == 6, f"space {sid}: expected 6 swap variants, got {len(variants)}"
+            give_receive_pairs = {(a.resource_to_give, a.resource_to_receive) for a in variants}
+            assert len(give_receive_pairs) == 6
+
+    def test_shelf1_no_swap_when_no_resources(self, data):
+        """With 0 physical resources (after fruit cost), shelf 1 actions have no swap."""
+        import copy
+        state = setup_game(data, seed=42)
+        state = copy.deepcopy(state)
+        state = self._force_fromagerie(state)
+        player = state.players[0]
+        for w in player.workers:
+            w.location = WorkerLocation.IN_HAND
+            w.venue = None
+            w.space_id = None
+            w.return_after_rotation = None
+        player.resources[ResourceType.FRUIT] = 0
+        player.resources[ResourceType.LIVESTOCK] = 0
+        player.resources[ResourceType.STRUCTURE] = 0
+
+        actions = legal_make_cheese_actions(state, 0, data)
+        shelf1_space_ids = {s.space_id for s in data.fromagerie_spaces if s.shelf_id == 1}
+        shelf1_actions = [a for a in actions if a is not None and a.space_id in shelf1_space_ids]
+
+        for a in shelf1_actions:
+            assert a.resource_to_give is None, f"Expected no swap give, got {a.resource_to_give}"
+
+    def test_non_shelf1_has_no_swap_fields(self, data):
+        """Actions targeting non-shelf-1 spaces have no swap fields."""
+        import copy
+        state = setup_game(data, seed=42)
+        state = copy.deepcopy(state)
+        state = self._force_fromagerie(state)
+        player = state.players[0]
+        for w in player.workers:
+            w.location = WorkerLocation.IN_HAND
+            w.venue = None
+            w.space_id = None
+            w.return_after_rotation = None
+        player.resources[ResourceType.FRUIT] = 5
+        player.resources[ResourceType.LIVESTOCK] = 3
+        player.resources[ResourceType.STRUCTURE] = 3
+
+        actions = legal_make_cheese_actions(state, 0, data)
+        shelf1_space_ids = {s.space_id for s in data.fromagerie_spaces if s.shelf_id == 1}
+        non_shelf1 = [a for a in actions if a is not None and a.space_id not in shelf1_space_ids]
+
+        for a in non_shelf1:
+            assert a.resource_to_give is None
+            assert a.resource_to_receive is None
