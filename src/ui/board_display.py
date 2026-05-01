@@ -35,6 +35,7 @@ from src.ui.styles import (
     FG_MUTED,
     FG_PRIMARY,
     FONT_HEADING,
+    FONT_MONO,
     FONT_SMALL,
     FONT_SMALL_BOLD,
     FONT_TITLE,
@@ -181,7 +182,7 @@ class BoardDisplay:
             pf.pack(fill="x", pady=4, ipadx=2)
             lbl = tk.Label(
                 pf, text=f"P{pid}",
-                font=("Cascadia Mono", 9),
+                font=FONT_MONO,
                 justify="left", bg=BG_SURFACE, fg=colour, anchor="w",
             )
             lbl.pack(fill="x")

@@ -7,6 +7,7 @@ import tkinter as tk
 from src.ui.styles import (
     BG_PRIMARY,
     BG_SURFACE,
+    BG_SURFACE_ALT,
     FG_MUTED,
     FG_PRIMARY,
     FG_SECONDARY,
@@ -239,7 +240,7 @@ class VillesTable:
                 elif pid in leaders:
                     lbl.config(
                         text=str(count),
-                        bg=BG_SURFACE, fg=TABLE_CELL_FG,
+                        bg=BG_SURFACE_ALT, fg=TABLE_CELL_FG,
                         font=FONT_MONO_BOLD,
                     )
                 else:
