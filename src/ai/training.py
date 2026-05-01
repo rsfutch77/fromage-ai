@@ -38,7 +38,7 @@ from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, T
 from src.ai.q_agent import QAgent
 from src.ai.random_agent import RandomAgent
 from src.ai.state_encoder import encode_state
-from src.game.actions import all_legal_turn_actions
+from src.game.actions import TurnAction, all_legal_turn_actions
 from src.game.board import retrieve_workers, rotate_board, setup_game
 from src.game.engine import apply_turn
 from src.game.scoring import (
@@ -62,8 +62,8 @@ logger = logging.getLogger(__name__)
 EVAL_INTERVAL: int = 500
 CHECKPOINT_INTERVAL: int = 1000
 
-# (player_id, state_vec, action_idx, next_state_vec, n_legal_next, intermediate_reward)
-_Transition = tuple[int, np.ndarray, int, np.ndarray, int, float]
+# (player_id, state_vec, action_idx, next_state_vec, n_legal_next, intermediate_reward, action, next_legal)
+_Transition = tuple[int, np.ndarray, int, np.ndarray, int, float, TurnAction, list[TurnAction]]
 
 
 def train(n_games: int, data: "GameDataLoader", config_path: Path) -> QAgent:
@@ -236,7 +236,7 @@ def _run_training_game(
             next_state_vec = encode_state(state, player_id, data, enhanced=agent._enhanced_encoder)
             next_legal = all_legal_turn_actions(state, player_id, data)
 
-            transitions.append((player_id, state_vec, action_idx, next_state_vec, len(next_legal), intermediate_reward))
+            transitions.append((player_id, state_vec, action_idx, next_state_vec, len(next_legal), intermediate_reward, action, next_legal))
         state = rotate_board(state)
         state.turn_number += 1
         if state.game_end_triggered:
@@ -310,12 +310,15 @@ def _apply_updates(
 
     for pid, player_transitions in by_player.items():
         terminal_reward = terminal_rewards[pid]
-        for i, (_pid, state_vec, action_idx, next_state_vec, n_legal_next, shaping_reward) in enumerate(
+        for i, (_pid, state_vec, action_idx, next_state_vec, n_legal_next, shaping_reward, action, next_legal) in enumerate(
             reversed(player_transitions)
         ):
             # i == 0 is the chronologically last transition
             r = terminal_reward if i == 0 else shaping_reward
-            agent.update_precomputed(state_vec, action_idx, r, next_state_vec, n_legal_next)
+            agent.update_precomputed(
+                state_vec, action_idx, r, next_state_vec, n_legal_next,
+                action=action, next_legal=next_legal,
+            )
 
 
 def _std(values: list[float]) -> float:

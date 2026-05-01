@@ -59,7 +59,7 @@ Resource-bonus shelf bonuses require a player choice not encoded in `MakeCheeseA
 |---------------------------|-------------------------------|
 | `gain_1_resource_any`     | Gain 1 STRUCTURE              |
 | `gain_2_diff_resources`   | Gain 1 STRUCTURE + 1 LIVESTOCK |
-| `trade_resource_for_any`  | No-op (skip)                  |
+| `trade_resource_for_any`  | Swap: give 1 resource, receive 1 different resource (player choice encoded in MakeCheeseAction) |
 
 ---
 

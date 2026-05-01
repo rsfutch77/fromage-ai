@@ -22,16 +22,17 @@ import numpy as np
 
 from src.ai.agent import Agent
 from src.ai.state_encoder import STATE_VECTOR_SIZE, _BASE_SIZE, encode_state
-from src.game.actions import MAX_ACTIONS_PER_TURN, TurnAction, all_legal_turn_actions
+from src.game.actions import MAX_ACTIONS_PER_TURN, MakeCheeseAction, TurnAction, all_legal_turn_actions
+from src.game.types import ResourceType
 
 if TYPE_CHECKING:
     from src.game.data_loader import GameDataLoader
     from src.game.state import GameState
 
-# NOTE: Saved models trained with STATE_VECTOR_SIZE=197 are incompatible with
-# the enhanced encoder (292). Set use_enhanced_encoder=False in agent config
-# to use legacy 197-feature encoding, or retrain from scratch.
-_FEATURE_SIZE: int = STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN  # 492
+# NOTE: Saved models are incompatible across feature-size changes.
+# The +6 comes from one-hot(3) for resource_to_give + one-hot(3) for resource_to_receive.
+_SWAP_FEATURES: int = 6
+_FEATURE_SIZE: int = STATE_VECTOR_SIZE + MAX_ACTIONS_PER_TURN + _SWAP_FEATURES  # 498
 _HIDDEN: int = 64
 
 
@@ -61,7 +62,7 @@ class QAgent(Agent):
         self._weight_decay: float = float(config.get("weight_decay", 1e-6))
         self._enhanced_encoder: bool = bool(config.get("use_enhanced_encoder", True))
         self._state_size: int = STATE_VECTOR_SIZE if self._enhanced_encoder else _BASE_SIZE
-        self._feature_size: int = self._state_size + MAX_ACTIONS_PER_TURN
+        self._feature_size: int = self._state_size + MAX_ACTIONS_PER_TURN + _SWAP_FEATURES
 
         if self._use_network:
             scale = 0.01
@@ -88,7 +89,7 @@ class QAgent(Agent):
         if self._rng.random() < self._epsilon:
             return self._rng.choice(legal)
         state_vec = encode_state(state, player_id, self._data, enhanced=self._enhanced_encoder)
-        q_values = [self._q_value(state_vec, i) for i in range(len(legal))]
+        q_values = [self._q_value(state_vec, i, action=a) for i, a in enumerate(legal)]
         return legal[int(np.argmax(q_values))]
 
     def choose_action_with_info(
@@ -106,7 +107,7 @@ class QAgent(Agent):
         if self._rng.random() < self._epsilon:
             idx = self._rng.randrange(len(legal))
             return legal[idx], state_vec, idx, len(legal)
-        q_values = [self._q_value(state_vec, i) for i in range(len(legal))]
+        q_values = [self._q_value(state_vec, i, action=a) for i, a in enumerate(legal)]
         idx = int(np.argmax(q_values))
         return legal[idx], state_vec, idx, len(legal)
 
@@ -129,7 +130,10 @@ class QAgent(Agent):
         next_state_vec = encode_state(next_state, player_id, self._data, enhanced=self._enhanced_encoder)
 
         legal_next = all_legal_turn_actions(next_state, player_id, self._data)
-        self.update_precomputed(state_vec, action_idx, reward, next_state_vec, len(legal_next))
+        self.update_precomputed(
+            state_vec, action_idx, reward, next_state_vec, len(legal_next),
+            action=action, next_legal=legal_next,
+        )
 
     def update_precomputed(
         self,
@@ -138,25 +142,31 @@ class QAgent(Agent):
         reward: float,
         next_state_vec: np.ndarray,
         n_legal_next: int,
+        action: TurnAction | None = None,
+        next_legal: list[TurnAction] | None = None,
     ) -> None:
         """TD(0) update using pre-computed state vectors (avoids re-encoding)."""
         if n_legal_next > 0:
             max_q_next = max(
-                self._q_value(next_state_vec, i) for i in range(n_legal_next)
+                self._q_value(
+                    next_state_vec, i,
+                    action=next_legal[i] if next_legal is not None else None,
+                )
+                for i in range(n_legal_next)
             )
         else:
             max_q_next = 0.0
 
-        q_sa = self._q_value(state_vec, action_idx)
+        q_sa = self._q_value(state_vec, action_idx, action=action)
         delta = reward + self._gamma * max_q_next - q_sa
 
         # Clip TD error to prevent weight explosion
         delta = float(np.clip(delta, -10.0, 10.0))
 
         if self._use_network:
-            self._update_network(state_vec, action_idx, delta)
+            self._update_network(state_vec, action_idx, delta, action=action)
         else:
-            phi = self._phi(state_vec, action_idx)
+            phi = self._phi(state_vec, action_idx, action=action)
             # L2 weight decay to prevent unbounded growth
             self._weights *= (1.0 - self._weight_decay)
             self._weights += self._alpha * delta * phi
@@ -207,16 +217,34 @@ class QAgent(Agent):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _phi(self, state_vec: np.ndarray, action_idx: int) -> np.ndarray:
-        """Feature vector: [state_vec; one_hot(action_idx, MAX_ACTIONS_PER_TURN)]."""
+    @staticmethod
+    def _swap_features(action: TurnAction | None) -> np.ndarray:
+        """Return 6-element vector: one-hot(3) give + one-hot(3) receive."""
+        _SWAP_MAP = {ResourceType.FRUIT: 0, ResourceType.LIVESTOCK: 1, ResourceType.STRUCTURE: 2}
+        vec = np.zeros(_SWAP_FEATURES, dtype=np.float32)
+        if action is None:
+            return vec
+        mc_list = action.make_cheese
+        if not mc_list:
+            return vec
+        mc = mc_list[0]
+        if mc.resource_to_give is not None and mc.resource_to_give in _SWAP_MAP:
+            vec[_SWAP_MAP[mc.resource_to_give]] = 1.0
+        if mc.resource_to_receive is not None and mc.resource_to_receive in _SWAP_MAP:
+            vec[3 + _SWAP_MAP[mc.resource_to_receive]] = 1.0
+        return vec
+
+    def _phi(self, state_vec: np.ndarray, action_idx: int, action: TurnAction | None = None) -> np.ndarray:
+        """Feature vector: [state_vec; one_hot(action_idx); swap_one_hot(6)]."""
         one_hot = np.zeros(MAX_ACTIONS_PER_TURN, dtype=np.float32)
         if 0 <= action_idx < MAX_ACTIONS_PER_TURN:
             one_hot[action_idx] = 1.0
-        return np.concatenate([state_vec, one_hot]).astype(np.float64)
+        swap = self._swap_features(action)
+        return np.concatenate([state_vec, one_hot, swap]).astype(np.float64)
 
-    def _q_value(self, state_vec: np.ndarray, action_idx: int) -> float:
+    def _q_value(self, state_vec: np.ndarray, action_idx: int, action: TurnAction | None = None) -> float:
         """Compute Q(s, action_idx)."""
-        phi = self._phi(state_vec, action_idx)
+        phi = self._phi(state_vec, action_idx, action=action)
         if self._use_network:
             q, _ = self._forward(phi)
             return q
@@ -231,9 +259,9 @@ class QAgent(Agent):
         q = float((h2 @ self._params["W3"] + self._params["b3"])[0])
         return q, {"x": x, "z1": z1, "h1": h1, "z2": z2, "h2": h2}
 
-    def _update_network(self, state_vec: np.ndarray, action_idx: int, delta: float) -> None:
+    def _update_network(self, state_vec: np.ndarray, action_idx: int, delta: float, action: TurnAction | None = None) -> None:
         """Gradient ascent on Q by delta (equivalent to minimising TD-error loss)."""
-        phi = self._phi(state_vec, action_idx)
+        phi = self._phi(state_vec, action_idx, action=action)
         _, cache = self._forward(phi)
 
         # Gradient of Q w.r.t. each parameter (chain rule, output layer first)
