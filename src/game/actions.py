@@ -398,11 +398,13 @@ def legal_make_cheese_actions(
     player_id: int,
     data: GameDataLoader,
     extra_fruit: int = 0,
+    extra_resources: dict[ResourceType, int] | None = None,
 ) -> list[MakeCheeseAction | None]:
     """Return all legal cheese-placement choices for *player_id* this turn.
 
     Includes None (skip make-cheese).
     extra_fruit: additional fruit to treat as available (for gather-then-spend combos).
+    extra_resources: additional resources from gathering (for swap availability on shelf 1).
     A space is legal if the venue faces the player, is unoccupied, the player has
     a matching worker in hand, has tokens remaining, and can afford the fruit cost.
     """
@@ -431,11 +433,12 @@ def legal_make_cheese_actions(
                 if shelf.immediate_bonus == "trade_resource_for_any":
                     # Compute fruit available after paying the space's fruit cost.
                     fruit_after_cost = effective_fruit - (1 if sp.fruit_requirement != FruitRequirement.NONE else 0)
+                    _extra = extra_resources or {}
                     has_any_swap = False
                     for give in _SWAPPABLE:
-                        available = player.resources.get(give, 0)
+                        available = player.resources.get(give, 0) + _extra.get(give, 0)
                         if give == ResourceType.FRUIT:
-                            available = fruit_after_cost
+                            available = fruit_after_cost + _extra.get(ResourceType.FRUIT, 0)
                         if available < 1:
                             continue
                         for receive in _SWAPPABLE:
@@ -658,8 +661,16 @@ def all_legal_turn_actions(
         for use_barn in barn_choices:
             available_for_cheese: set[CheeseType] = _workers_available_after_gather(player, gc, use_barn)
 
-            extra_fruit = (gc.resource_space.turns if gc is not None and state.resource_facing(player_id) == ResourceType.FRUIT else 0)
-            all_cheese = legal_make_cheese_actions(state, player_id, data, extra_fruit)
+            extra_fruit = 0
+            extra_resources: dict[ResourceType, int] = {}
+            if gc is not None:
+                rtype = state.resource_facing(player_id)
+                amount = gc.resource_space.turns
+                if rtype == ResourceType.FRUIT:
+                    extra_fruit = amount
+                else:
+                    extra_resources[rtype] = amount
+            all_cheese = legal_make_cheese_actions(state, player_id, data, extra_fruit, extra_resources)
             cheese_combos = _legal_cheese_combos(
                 available_for_cheese, all_cheese, min(1, player.cheese_tokens_remaining)
             )

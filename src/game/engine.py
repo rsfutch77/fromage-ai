@@ -185,9 +185,12 @@ def _apply_fromagerie_shelf_bonus(
     elif bonus == "trade_resource_for_any":
         if action is not None and action.resource_to_give is not None and action.resource_to_receive is not None:
             player = state.players[player_id]
-            if player.resources.get(action.resource_to_give, 0) >= 1:
-                player.resources[action.resource_to_give] -= 1
-                _gain_resource_inplace(state, player_id, action.resource_to_receive, 1, data, ctx)
+            if player.resources.get(action.resource_to_give, 0) < 1:
+                raise IllegalActionError(
+                    f"Player {player_id} cannot give {action.resource_to_give} for swap — insufficient resources"
+                )
+            player.resources[action.resource_to_give] -= 1
+            _gain_resource_inplace(state, player_id, action.resource_to_receive, 1, data, ctx)
     else:
         logger.warning("Unknown Fromagerie shelf bonus '%s' — ignored", bonus)
 
