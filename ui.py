@@ -24,39 +24,48 @@ from src.game.scoring import score_game, winner
 from src.game.simulation import run_placements, run_rotation
 from src.game.state import GameState
 from src.ui.board_display import BoardDisplay
+from src.ui.styles import (
+    BG_INPUT,
+    BG_SURFACE_ALT,
+    BORDER_SUBTLE,
+    BTN_ACCENT_BG,
+    BTN_ACCENT_FG,
+    BTN_ACTIVE_BG,
+    BTN_BG,
+    BTN_FG,
+    FG_PRIMARY,
+    FG_SECONDARY,
+    FONT_BODY_BOLD,
+    FONT_SMALL,
+    FONT_SMALL_BOLD,
+    FONT_TINY,
+    FONT_TINY_BOLD,
+    PLAYER_COLOURS,
+    STATUS_BG,
+    STATUS_FG,
+)
 
 # Phase labels
-_PHASE_PLACE  = "place"
+_PHASE_PLACE = "place"
 _PHASE_ROTATE = "rotate"
 
 # Structure slot names — index matches structures_unlocked list
 _STRUCT_NAMES = ["Barn", "Dock", "Grnhs", "HQ"]
 
-# Player accent colours (mirrors board_display._PLAYER_COLOURS)
-_PLAYER_COLOURS = ["#EF5350", "#42A5F5", "#66BB6A", "#FFA726"]
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Fromage board visualiser")
-    parser.add_argument("--seed",  type=int, default=42)
-    parser.add_argument("--auto",  action="store_true")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--auto", action="store_true")
     parser.add_argument("--delay", type=int, default=500)
     args = parser.parse_args()
 
-    data   = GameDataLoader()
+    data = GameDataLoader()
     agents = [RandomAgent(data, seed=args.seed + i) for i in range(4)]
 
     display = BoardDisplay(data)
 
-    # ── game state & history ───────────────────────────────────────────────
-    # Each history entry is (phase_label, GameState) recorded *before* that
-    # phase runs, so browsing shows what the board looked like at each moment.
-    #
-    # history[0] = ("place", initial_state)  ← start of turn 1 placement
-    # history[1] = ("rotate", post-placement state)
-    # history[2] = ("place", post-rotation state)  ← start of turn 2
-    # …
-
+    # ---- game state & history ----------------------------------------------
     initial_state = setup_game(data, args.seed)
     history: list[tuple[str, GameState]] = [(_PHASE_PLACE, initial_state)]
     view_idx = 0
@@ -64,7 +73,7 @@ def main() -> None:
 
     status_var = tk.StringVar()
 
-    # ── helpers ────────────────────────────────────────────────────────────
+    # ---- helpers -----------------------------------------------------------
 
     def current_state():
         return history[view_idx][1]
@@ -81,18 +90,18 @@ def main() -> None:
 
         if game_over and at_tip():
             scores = score_game(state, data)
-            wids   = winner(scores)
-            wstr   = ", ".join(f"P{w}" for w in wids)
-            status_var.set(f"Game over — Turn {state.turn_number} — Winner(s): {wstr}")
+            wids = winner(scores)
+            wstr = ", ".join(f"P{w}" for w in wids)
+            status_var.set(f"Game over \u2014 Turn {state.turn_number} \u2014 Winner(s): {wstr}")
             display.update_scores(scores)
         else:
             display.clear_scores()
             phase = current_phase()
             phase_str = "Workers placed" if phase == _PHASE_ROTATE else "Pre-placement"
-            pos   = f"{view_idx + 1}/{len(history)}"
-            hist  = "  [history]" if not at_tip() else ""
+            pos = f"{view_idx + 1}/{len(history)}"
+            hist = "  [history]" if not at_tip() else ""
             status_var.set(
-                f"Turn {state.turn_number}  ·  {phase_str}  ({pos}){hist}"
+                f"Turn {state.turn_number}  \u00b7  {phase_str}  ({pos}){hist}"
             )
 
         btn_prev.config(state="normal" if view_idx > 0 else "disabled")
@@ -111,18 +120,18 @@ def main() -> None:
                 unlocked = tip_state.players[pid].structures_unlocked[slot]
                 btn = _struct_btns[pid][slot]
                 btn.config(
-                    relief="sunken" if unlocked else "raised",
-                    bg="#A5D6A7" if unlocked else "#F5F5F5",
+                    relief="flat" if unlocked else "raised",
+                    bg="#2E7D32" if unlocked else BG_INPUT,
+                    fg="white" if unlocked else FG_SECONDARY,
                     state="normal" if can_debug else "disabled",
                 )
 
     def _action_label() -> str:
         if current_phase() == _PHASE_PLACE:
-            return "Place Workers ▶"
-        return "Rotate Board ▶"
+            return "Place Workers \u25b6"
+        return "Rotate Board \u25b6"
 
     def _advance() -> None:
-        """Compute and append the next snapshot to history."""
         nonlocal game_over, view_idx
         _phase, state = history[-1]
 
@@ -138,7 +147,6 @@ def main() -> None:
         view_idx = len(history) - 1
 
     def do_action() -> None:
-        """Advance one phase from the tip."""
         if game_over or not at_tip():
             return
         _advance()
@@ -151,7 +159,6 @@ def main() -> None:
             refresh()
 
     def do_fwd() -> None:
-        """Step forward through history, or advance if at the tip."""
         nonlocal view_idx
         if not at_tip():
             view_idx += 1
@@ -167,15 +174,7 @@ def main() -> None:
         display.root.after(args.delay, do_auto)
 
     def do_toggle_structure(player_id: int, slot_idx: int) -> None:
-        """Debug: toggle structure slot on/off in the tip state.
-
-        Safe because:
-        - actions.py only generates unlock actions for locked slots, so a
-          debug-forced unlock is never re-spent via normal game logic.
-        - engine.py raises IllegalActionError if a slot is already unlocked,
-          providing a second layer of protection.
-        Only operates on the tip state; no-op when browsing history.
-        """
+        """Debug: toggle structure slot on/off in the tip state."""
         if not at_tip() or game_over:
             return
         tip_state = history[-1][1]
@@ -183,56 +182,85 @@ def main() -> None:
         player.structures_unlocked[slot_idx] = not player.structures_unlocked[slot_idx]
         refresh()
 
-    # ── control bar ────────────────────────────────────────────────────────
-    ctrl = tk.Frame(display.root, bg="#ECEFF1", pady=4)
-    ctrl.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 6))
+    # ---- control bar -------------------------------------------------------
+    ctrl = tk.Frame(display.root, bg=STATUS_BG, pady=6)
+    ctrl.grid(row=2, column=0, columnspan=3, sticky="ew", padx=0, pady=0)
 
-    btn_prev = tk.Button(ctrl, text="◀ Back",   width=10, command=do_prev)
-    btn_prev.pack(side="left", padx=4)
+    btn_prev = tk.Button(
+        ctrl, text="\u25c0 Back", width=10, command=do_prev,
+        bg=BTN_BG, fg=BTN_FG, activebackground=BTN_ACTIVE_BG,
+        font=FONT_SMALL_BOLD, relief="flat", bd=0, cursor="hand2",
+    )
+    btn_prev.pack(side="left", padx=(10, 4))
 
-    btn_fwd  = tk.Button(ctrl, text="Fwd ▶",    width=10, command=do_fwd)
+    btn_fwd = tk.Button(
+        ctrl, text="Fwd \u25b6", width=10, command=do_fwd,
+        bg=BTN_BG, fg=BTN_FG, activebackground=BTN_ACTIVE_BG,
+        font=FONT_SMALL_BOLD, relief="flat", bd=0, cursor="hand2",
+    )
     btn_fwd.pack(side="left", padx=4)
 
-    btn_action = tk.Button(ctrl, text=_action_label(), width=16, command=do_action,
-                           font=("Helvetica", 9, "bold"))
+    btn_action = tk.Button(
+        ctrl, text=_action_label(), width=18, command=do_action,
+        bg=BTN_ACCENT_BG, fg=BTN_ACCENT_FG, activebackground="#7C75FF",
+        font=FONT_BODY_BOLD, relief="flat", bd=0, cursor="hand2",
+    )
     btn_action.pack(side="left", padx=8)
 
-    btn_run = tk.Button(ctrl, text="Run to End", width=12, command=do_auto)
+    btn_run = tk.Button(
+        ctrl, text="Run to End", width=12, command=do_auto,
+        bg=BTN_BG, fg=BTN_FG, activebackground=BTN_ACTIVE_BG,
+        font=FONT_SMALL_BOLD, relief="flat", bd=0, cursor="hand2",
+    )
     btn_run.pack(side="left", padx=4)
 
-    tk.Label(ctrl, textvariable=status_var, bg="#ECEFF1", fg="#37474F",
-             font=("Helvetica", 9)).pack(side="left", padx=8)
+    tk.Label(
+        ctrl, textvariable=status_var,
+        bg=STATUS_BG, fg=STATUS_FG,
+        font=FONT_SMALL,
+    ).pack(side="left", padx=10)
 
-    # ── debug: force-unlock structures ─────────────────────────────────────
+    # ---- debug: force-unlock structures ------------------------------------
     dbg = tk.LabelFrame(
-        display.root, text="Debug — Force Structures (tip only)",
-        font=("Helvetica", 8), bg="#ECEFF1", padx=6, pady=4,
+        display.root, text="Debug \u2014 Force Structures (tip only)",
+        font=FONT_TINY_BOLD,
+        bg=BG_SURFACE_ALT, fg=FG_SECONDARY,
+        bd=1, relief="flat",
+        highlightbackground=BORDER_SUBTLE,
+        highlightthickness=1,
+        padx=8, pady=6,
     )
-    dbg.grid(row=3, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 8))
+    dbg.grid(row=3, column=0, columnspan=3, sticky="ew", padx=10, pady=(0, 10))
 
     # Header row: slot labels
     for col, name in enumerate(_STRUCT_NAMES):
-        tk.Label(dbg, text=name, font=("Helvetica", 8, "bold"),
-                 bg="#ECEFF1", width=6).grid(row=0, column=col + 1, padx=2)
+        tk.Label(
+            dbg, text=name, font=FONT_TINY_BOLD,
+            bg=BG_SURFACE_ALT, fg=FG_PRIMARY, width=6,
+        ).grid(row=0, column=col + 1, padx=2)
 
     # One row per player
     _struct_btns: list[list[tk.Button]] = []
     for pid in range(4):
-        tk.Label(dbg, text=f"P{pid}", font=("Helvetica", 8, "bold"),
-                 bg="#ECEFF1", fg=_PLAYER_COLOURS[pid], width=3).grid(
-            row=pid + 1, column=0, padx=(0, 4))
+        tk.Label(
+            dbg, text=f"P{pid}", font=FONT_TINY_BOLD,
+            bg=BG_SURFACE_ALT, fg=PLAYER_COLOURS[pid], width=3,
+        ).grid(row=pid + 1, column=0, padx=(0, 4))
         row_btns: list[tk.Button] = []
         for slot in range(4):
             btn = tk.Button(
                 dbg, text=_STRUCT_NAMES[slot], width=6,
-                font=("Helvetica", 7),
+                font=FONT_TINY,
+                bg=BG_INPUT, fg=FG_SECONDARY,
+                activebackground=BTN_ACTIVE_BG,
+                relief="flat", bd=0, cursor="hand2",
                 command=lambda p=pid, s=slot: do_toggle_structure(p, s),
             )
-            btn.grid(row=pid + 1, column=slot + 1, padx=2, pady=1)
+            btn.grid(row=pid + 1, column=slot + 1, padx=2, pady=2)
             row_btns.append(btn)
         _struct_btns.append(row_btns)
 
-    display.root.bind("<Left>",  lambda _: do_prev())
+    display.root.bind("<Left>", lambda _: do_prev())
     display.root.bind("<Right>", lambda _: do_fwd())
     display.root.bind("<space>", lambda _: do_action())
 
